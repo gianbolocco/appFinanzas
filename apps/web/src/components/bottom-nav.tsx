@@ -16,7 +16,7 @@ export function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-10 mx-auto w-full max-w-md">
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-10 mx-auto w-full max-w-md lg:hidden">
       <nav className="pointer-events-auto mx-3 mb-3 flex items-center justify-around rounded-full border border-border bg-card/90 p-1.5 shadow-lg backdrop-blur-md">
         {TABS.map((tab) => {
           const isActive = tab.exact ? pathname === tab.href : pathname.startsWith(tab.href);

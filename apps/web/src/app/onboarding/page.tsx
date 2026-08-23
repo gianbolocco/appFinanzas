@@ -28,7 +28,7 @@ export default async function OnboardingPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-svh w-full max-w-md flex-col px-6 py-10">
+    <main className="mx-auto flex min-h-svh w-full max-w-md flex-col px-6 py-10 lg:max-w-lg">
       <header className="mb-8 flex flex-col items-center gap-3 text-center">
         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
           <span className="text-lg font-bold">G</span>

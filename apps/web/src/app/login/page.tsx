@@ -19,7 +19,7 @@ export default async function LoginPage({
   const error = typeof sp.error === "string" ? sp.error : null;
 
   return (
-    <main className="mx-auto flex min-h-svh w-full max-w-md flex-col items-center justify-center gap-8 px-6">
+    <main className="mx-auto flex min-h-svh w-full max-w-md flex-col items-center justify-center gap-8 px-6 lg:max-w-lg">
       <div className="flex flex-col items-center gap-3 text-center">
         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
           <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
