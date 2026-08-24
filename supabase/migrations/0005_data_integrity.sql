@@ -30,22 +30,46 @@ alter table public.transactions
 -- createTransaction, reconocibles por sus notas y sus cuentas cruzadas.
 -- Idempotente: al terminar no quedan filas que matcheen el patrón.
 
-with pares as (
+with expense_ranked as (
   select
-    e.id     as expense_id,
-    i.id     as income_id,
-    i.amount as dest_amount
-  from public.transactions e
-  join public.transactions i
+    id, user_id, date, account_id, to_account_id,
+    row_number() over (
+      partition by user_id, date, account_id, to_account_id
+      order by created_at
+    ) as rn
+  from public.transactions
+  where type = 'expense'
+    and to_account_id is not null
+    and note like 'Transfer →%'
+),
+income_ranked as (
+  select
+    id, user_id, date, account_id, to_account_id, amount as dest_amount,
+    row_number() over (
+      partition by user_id, date, account_id, to_account_id
+      order by created_at
+    ) as rn
+  from public.transactions
+  where type = 'income'
+    and note like 'Transfer ←%'
+),
+-- row_number() por (usuario, fecha, cuentas) empareja transferencias
+-- duplicadas el mismo dia en orden de creacion, en vez de cruzarlas:
+-- createTransaction siempre insertaba el gasto y despues el ingreso de
+-- la misma transferencia en la misma request, asi que el orden por
+-- created_at dentro de cada grupo reconstruye el par correcto.
+pares as (
+  select
+    e.id as expense_id,
+    i.id as income_id,
+    i.dest_amount
+  from expense_ranked e
+  join income_ranked i
     on  i.user_id       = e.user_id
     and i.date          = e.date
     and i.account_id    = e.to_account_id
     and i.to_account_id = e.account_id
-    and i.type          = 'income'
-    and i.note like 'Transfer ←%'
-  where e.type = 'expense'
-    and e.to_account_id is not null
-    and e.note like 'Transfer →%'
+    and i.rn             = e.rn
 ),
 actualizadas as (
   update public.transactions t
