@@ -32,7 +32,15 @@ export function CategoryPieChart({ data }: { data: Datum[] }) {
         </Pie>
         <Tooltip
           formatter={(value) => Number(value).toLocaleString("es-AR", { minimumFractionDigits: 2 })}
-          contentStyle={{ borderRadius: 12, border: "1px solid var(--border)", fontSize: 12 }}
+          contentStyle={{
+            borderRadius: 12,
+            border: "1px solid var(--border)",
+            backgroundColor: "var(--card)",
+            color: "var(--card-foreground)",
+            fontSize: 12,
+          }}
+          itemStyle={{ color: "var(--card-foreground)" }}
+          labelStyle={{ color: "var(--muted-foreground)" }}
         />
       </PieChart>
     </ResponsiveContainer>

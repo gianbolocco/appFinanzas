@@ -101,7 +101,7 @@ export default async function AccountDetailPage({ params }: PageProps<"/dashboar
         <p className="mt-2 font-mono text-3xl font-semibold tabular-nums lg:text-4xl">
           {formatMoney(account.balance, account.currency)}
         </p>
-        <p className={`mt-2 text-sm ${monthChange >= 0 ? "text-white/90" : "text-white/70"}`}>
+        <p className="mt-2 text-sm text-primary-foreground/80">
           {monthChange >= 0 ? "↑" : "↓"} {formatMoney(Math.abs(monthChange), account.currency)} este mes
         </p>
       </section>

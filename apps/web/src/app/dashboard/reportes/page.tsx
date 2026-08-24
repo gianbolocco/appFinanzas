@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { TrendingUp, TrendingDown, Wallet, ArrowUp, ArrowDown } from "lucide-react";
 
 import { getCurrentUser } from "@/lib/dal";
@@ -12,21 +13,26 @@ import { CategoryPieChart } from "./category-pie-chart";
 import { TrendsLineChart } from "./trends-line-chart";
 import { ParetoBarChart } from "./pareto-bar-chart";
 import { AccountBarChart } from "./account-bar-chart";
+import { PeriodPicker, resolvePeriod } from "./period-picker";
 
 function pctChange(curr: number, prev: number) {
   if (prev === 0) return curr > 0 ? 100 : 0;
   return ((curr - prev) / prev) * 100;
 }
 
-export default async function ReportesPage() {
+export default async function ReportesPage({ searchParams }: PageProps<"/dashboard/reportes">) {
+  const sp = await searchParams;
   const { profile } = await getCurrentUser();
   const baseCurrency = profile.base_currency;
 
+  const periodo = typeof sp.periodo === "string" ? sp.periodo : undefined;
+  const { from, to, label } = resolvePeriod(periodo);
+
   const [categories, trends, comparison, byAccount] = await Promise.all([
-    getCategoryBreakdown(),
+    getCategoryBreakdown({ from, to }),
     getMonthlyTrends(),
     getMonthComparison(),
-    getBreakdownByAccount(),
+    getBreakdownByAccount({ from, to }),
   ]);
 
   const totalExpense = categories.reduce((s, c) => s + c.total, 0);
@@ -42,14 +48,22 @@ export default async function ReportesPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header>
-        <h1 className="text-xl font-semibold lg:text-2xl">Reportes</h1>
-        <p className="text-sm text-muted-foreground">Análisis de tus finanzas</p>
+      <header className="flex flex-col gap-3">
+        <div>
+          <h1 className="text-xl font-semibold lg:text-2xl">Reportes</h1>
+          <p className="text-sm text-muted-foreground">{label}</p>
+        </div>
+        <Suspense fallback={<div className="h-11 rounded-xl bg-muted" />}>
+          <PeriodPicker />
+        </Suspense>
       </header>
 
       {/* Comparativa mes actual vs anterior */}
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">Este mes vs mes anterior</h2>
+        <p className="-mt-2 text-xs text-muted-foreground">
+          Siempre compara mes calendario, sin importar el período elegido arriba.
+        </p>
         <div className="grid grid-cols-3 gap-3">
           <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
             <div className="flex items-center gap-1.5">
@@ -109,7 +123,10 @@ export default async function ReportesPage() {
 
       {/* Desglose por categoría + tabla */}
       <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold">Desglose por categoría</h2>
+        <h2 className="text-lg font-semibold">
+          Desglose por categoría{" "}
+          <span className="text-sm font-normal text-muted-foreground">· {label}</span>
+        </h2>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
             <CategoryPieChart data={pieData} />
@@ -147,7 +164,10 @@ export default async function ReportesPage() {
 
       {/* Top gastos / Pareto */}
       <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold">Top gastos (Pareto)</h2>
+        <h2 className="text-lg font-semibold">
+          Top gastos (Pareto){" "}
+          <span className="text-sm font-normal text-muted-foreground">· {label}</span>
+        </h2>
         <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
           <ParetoBarChart data={categories.slice(0, 8).map((c) => ({ name: c.name, total: c.total, color: c.color }))} />
         </div>
@@ -155,7 +175,10 @@ export default async function ReportesPage() {
 
       {/* Por método de pago */}
       <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold">Por cuenta / método de pago</h2>
+        <h2 className="text-lg font-semibold">
+          Por cuenta / método de pago{" "}
+          <span className="text-sm font-normal text-muted-foreground">· {label}</span>
+        </h2>
         <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
           <AccountBarChart
             data={byAccount.map((a) => ({ name: a.name, income: a.income, expense: a.expense }))}
