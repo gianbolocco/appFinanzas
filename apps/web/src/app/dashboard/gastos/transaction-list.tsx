@@ -208,7 +208,7 @@ export function TransactionList({
                 </p>
                 <button
                   onClick={() => openEdit(t)}
-                  className="rounded-lg p-1.5 text-muted-foreground opacity-0 transition hover:bg-accent hover:text-foreground group-hover:opacity-100"
+                  className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-accent hover:text-foreground lg:opacity-0 lg:group-hover:opacity-100"
                   aria-label="Editar"
                 >
                   <Pencil className="h-4 w-4" />

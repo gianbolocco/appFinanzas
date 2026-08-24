@@ -97,6 +97,13 @@ function TransactionSheetInner({
   const [note, setNote] = useState(editingTx?.note ?? "");
   const [date, setDate] = useState(editingTx?.date ?? new Date().toISOString().slice(0, 10));
   const [installments, setInstallments] = useState("");
+  const [destRate, setDestRate] = useState("1");
+
+  const fromAccount = accounts.find((a) => a.id === accountId);
+  const toAccount = accounts.find((a) => a.id === toAccountId);
+  const isCrossCurrency =
+    type === "transfer" && fromAccount && toAccount && fromAccount.currency !== toAccount.currency;
+  const destAmount = isCrossCurrency && amount ? Number(amount) * Number(destRate || 0) : null;
 
   const filteredCategories = categories.filter((c) =>
     type === "transfer" ? c.kind === "transfer" : c.kind === type,
@@ -143,8 +150,17 @@ function TransactionSheetInner({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 lg:items-center">
-      <div className="flex max-h-[92vh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-background shadow-xl lg:rounded-3xl">
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 lg:items-center"
+      onClick={onClose}
+    >
+      <div
+        className="flex max-h-[92vh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-background shadow-xl lg:rounded-3xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex justify-center pt-2 lg:hidden">
+          <div className="h-1 w-10 rounded-full bg-muted-foreground/30" />
+        </div>
         <header className="flex items-center justify-between border-b border-border px-5 py-4">
           <h2 className="text-base font-semibold">
             {isEditing ? "Editar movimiento" : "Nuevo movimiento"}
@@ -232,6 +248,38 @@ function TransactionSheetInner({
                 ))}
               </select>
             </div>
+          )}
+
+          {/* Rate para transferencias entre distintas moneda */}
+          {isCrossCurrency && (
+            <div className="flex flex-col gap-1.5 rounded-xl bg-muted/50 p-3">
+              <label className="text-sm font-medium">
+                Tipo de cambio: 1 {fromAccount?.currency} = ?
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  name="dest_rate"
+                  type="number"
+                  step="0.0001"
+                  inputMode="decimal"
+                  value={destRate}
+                  onChange={(e) => setDestRate(e.target.value)}
+                  placeholder="Ej.: 1200"
+                  required
+                  className="h-11 flex-1 rounded-xl border border-input bg-background px-3 font-mono text-sm tabular-nums outline-none focus:border-primary"
+                />
+                <span className="text-sm font-medium text-muted-foreground">{toAccount?.currency}</span>
+              </div>
+              {destAmount !== null && (
+                <p className="text-xs text-muted-foreground">
+                  Recibe {destAmount.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{" "}
+                  {toAccount?.currency}
+                </p>
+              )}
+            </div>
+          )}
+          {type === "transfer" && !isCrossCurrency && (
+            <input type="hidden" name="dest_rate" value="1" />
           )}
 
           {/* Categoría (no transferencias) */}

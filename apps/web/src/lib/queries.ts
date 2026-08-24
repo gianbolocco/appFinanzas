@@ -38,8 +38,101 @@ export async function getCategories() {
 }
 
 // ----------------------------------------------------------------------------
-// Transacciones
+// Detalle de cuenta individual
 // ----------------------------------------------------------------------------
+export async function getAccountById(accountId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("accounts").select("*").eq("id", accountId).single();
+  if (error) throw error;
+  return data;
+}
+
+export async function getAccountMonthlyStats(accountId: string) {
+  const supabase = await createClient();
+  const now = new Date();
+  const from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("type, amount, currency, account_id, to_account_id")
+    .eq("account_id", accountId)
+    .gte("date", from);
+
+  if (error) throw error;
+
+  let income = 0;
+  let expense = 0;
+  let transferIn = 0;
+  let transferOut = 0;
+
+  for (const t of data ?? []) {
+    if (t.type === "income") income += t.amount;
+    else if (t.type === "expense") expense += t.amount;
+    else if (t.type === "transfer") transferOut += t.amount;
+  }
+
+  // Transferencias entrantes (donde esta cuenta es el destino)
+  const { data: incoming } = await supabase
+    .from("transactions")
+    .select("amount, currency, exchange_rate")
+    .eq("to_account_id", accountId)
+    .gte("date", from);
+
+  for (const t of incoming ?? []) {
+    transferIn += t.amount * (t.exchange_rate ?? 1);
+  }
+
+  return { income, expense, transferIn, transferOut };
+}
+
+export async function getAccountBalanceAtDate(accountId: string, date: string) {
+  const supabase = await createClient();
+  const { data: account } = await supabase
+    .from("accounts")
+    .select("balance")
+    .eq("id", accountId)
+    .single();
+  if (!account) return 0;
+
+  // Sumar transacciones después de esa fecha para restarlas del saldo actual
+  const { data: txs } = await supabase
+    .from("transactions")
+    .select("type, amount, exchange_rate")
+    .eq("account_id", accountId)
+    .gt("date", date);
+
+  const { data: incoming } = await supabase
+    .from("transactions")
+    .select("amount, exchange_rate")
+    .eq("to_account_id", accountId)
+    .gt("date", date);
+
+  let delta = 0;
+  for (const t of txs ?? []) {
+    if (t.type === "income") delta -= t.amount;
+    else if (t.type === "expense") delta += t.amount;
+    else if (t.type === "transfer") delta += t.amount;
+  }
+  for (const t of incoming ?? []) {
+    delta -= t.amount * (t.exchange_rate ?? 1);
+  }
+
+  return account.balance + delta;
+}
+
+export async function getAccountTransactions(accountId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("transactions")
+    .select(
+      "*, category:categories(*), account:accounts!transactions_account_id_fkey(*), to_account:accounts!transactions_to_account_id_fkey(*)",
+    )
+    .or(`account_id.eq.${accountId},to_account_id.eq.${accountId}`)
+    .order("date", { ascending: false })
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data;
+}
 export async function getTransactions(opts?: {
   limit?: number;
   type?: string;
