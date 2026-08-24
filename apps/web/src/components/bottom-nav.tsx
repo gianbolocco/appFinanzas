@@ -2,17 +2,26 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Wallet, PieChart, TrendingUp, Settings, Plus } from "lucide-react";
+import { Home, Wallet, PieChart, TrendingUp, MoreHorizontal, Plus } from "lucide-react";
 import { useState } from "react";
 
 import { TransactionSheet } from "@/components/transaction-sheet";
+import { MoreSheet } from "@/components/more-sheet";
 
 const TABS = [
   { href: "/dashboard", icon: Home, label: "Inicio", exact: true },
   { href: "/dashboard/gastos", icon: Wallet, label: "Gastos" },
   { href: "/dashboard/presupuestos", icon: PieChart, label: "Presup." },
   { href: "/dashboard/reportes", icon: TrendingUp, label: "Reportes" },
-  { href: "/dashboard/ajustes", icon: Settings, label: "Ajustes" },
+];
+
+// Rutas que viven detrás del botón "Más": el tab se marca activo si estás en una.
+const MORE_ROUTES = [
+  "/dashboard/metas",
+  "/dashboard/suscripciones",
+  "/dashboard/cuentas",
+  "/dashboard/categorias",
+  "/dashboard/ajustes",
 ];
 
 type Account = { id: string; name: string; type: string; currency: string };
@@ -37,6 +46,7 @@ export function BottomNav({
 }) {
   const pathname = usePathname();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   return (
     <>
@@ -62,6 +72,14 @@ export function BottomNav({
               </Link>
             );
           })}
+          <button
+            onClick={() => setMoreOpen(true)}
+            className={`flex flex-1 flex-col items-center gap-0.5 rounded-full py-1.5 text-[10px] font-medium transition ${MORE_ROUTES.some((r) => pathname.startsWith(r)) ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
+            aria-label="Más secciones"
+          >
+            <MoreHorizontal className="h-5 w-5" />
+            Más
+          </button>
         </nav>
       </div>
 
@@ -72,6 +90,8 @@ export function BottomNav({
         categories={categories}
         baseCurrency={baseCurrency}
       />
+
+      <MoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} />
     </>
   );
 }
