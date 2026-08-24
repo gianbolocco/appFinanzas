@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import Script from "next/script";
 import { Inter, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
+import { ThemeInit } from "@/components/theme-init";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -21,16 +21,6 @@ export const metadata: Metadata = {
   description: "Gestión de finanzas personales con carga desde Telegram y foto de tickets.",
 };
 
-const themeScript = `
-(function() {
-  try {
-    var pref = localStorage.getItem('guita-theme');
-    var dark = pref === 'dark' || (!pref && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    if (dark) document.documentElement.classList.add('dark');
-  } catch (e) {}
-})();
-`;
-
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
@@ -39,9 +29,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
-        <Script id="theme-init" strategy="beforeInteractive">
-          {themeScript}
-        </Script>
+        <ThemeInit />
         <Providers>{children}</Providers>
       </body>
     </html>
