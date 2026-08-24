@@ -4,6 +4,7 @@ import { TrendingUp, TrendingDown, Wallet } from "lucide-react";
 import { getCurrentUser } from "@/lib/dal";
 import { getAccounts, getTransactions, getMonthlySummary, getTotalBalance } from "@/lib/queries";
 import { formatMoney, formatSigned, formatShortDate } from "@/lib/format";
+import { getCategoryIcon } from "@/lib/category-icons";
 
 export default async function DashboardPage() {
   const { profile } = await getCurrentUser();
@@ -102,18 +103,18 @@ export default async function DashboardPage() {
             {transactions.map((t) => {
               const isIncome = t.type === "income";
               const signed = isIncome ? t.amount : -t.amount;
+              const Icon = getCategoryIcon(t.category?.icon);
+              const catColor = t.category?.color ?? "oklch(0.556 0 0)";
               return (
                 <div
                   key={t.id}
                   className="flex items-center gap-3 rounded-2xl border border-border bg-card p-3.5 shadow-sm"
                 >
                   <div
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg"
-                    style={{
-                      backgroundColor: `color-mix(in oklch, ${t.category?.color ?? "oklch(0.556 0 0)"} 15%, transparent)`,
-                    }}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+                    style={{ backgroundColor: `color-mix(in oklch, ${catColor} 15%, transparent)` }}
                   >
-                    {t.category?.icon ? iconFor(t.category.icon) : "💰"}
+                    <Icon className="h-5 w-5" style={{ color: catColor }} />
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">
@@ -136,8 +137,4 @@ export default async function DashboardPage() {
       </section>
     </div>
   );
-}
-
-function iconFor(icon: string) {
-  return <span>{icon}</span>;
 }

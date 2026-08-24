@@ -76,6 +76,23 @@ export async function deleteCategory(categoryId: string) {
   revalidatePath("/dashboard/categorias");
 }
 
+export async function updateCategory(categoryId: string, formData: FormData) {
+  const parsed = categoryFormSchema.parse({
+    name: formData.get("name"),
+    kind: formData.get("kind") ?? "expense",
+    parent_id: formData.get("parent_id") || null,
+    icon: formData.get("icon") || undefined,
+    color: formData.get("color") || "oklch(0.62 0.15 162)",
+  });
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("categories").update(parsed).eq("id", categoryId);
+  if (error) throw error;
+
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/categorias");
+}
+
 // ----------------------------------------------------------------------------
 // Transacciones
 // ----------------------------------------------------------------------------

@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { Search, Filter, X, Pencil } from "lucide-react";
 
 import { formatSigned, formatShortDate } from "@/lib/format";
+import { getCategoryIcon } from "@/lib/category-icons";
 import { TransactionSheet } from "@/components/transaction-sheet";
 
 type Tx = {
@@ -174,18 +175,18 @@ export function TransactionList({
             const isIncome = t.type === "income";
             const signed = isIncome ? t.amount : -t.amount;
             const isInstallment = t.installment_number && t.installments_total;
+            const Icon = getCategoryIcon(t.category?.icon ?? null);
+            const catColor = t.category?.color ?? "oklch(0.556 0 0)";
             return (
               <div
                 key={t.id}
                 className="group flex items-center gap-3 rounded-2xl border border-border bg-card p-3.5 shadow-sm transition hover:shadow-md"
               >
                 <div
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg"
-                  style={{
-                    backgroundColor: `color-mix(in oklch, ${t.category?.color ?? "oklch(0.556 0 0)"} 15%, transparent)`,
-                  }}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+                  style={{ backgroundColor: `color-mix(in oklch, ${catColor} 15%, transparent)` }}
                 >
-                  {t.category?.icon ?? "💰"}
+                  <Icon className="h-5 w-5" style={{ color: catColor }} />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">
