@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 import { getCurrentUser } from "@/lib/dal";
-import { getAccounts, getTransactions, getMonthlySummary, getTotalBalance } from "@/lib/queries";
+import { getAccounts, getTransactions, getMonthlySummary, getTotalBalance, getRates } from "@/lib/queries";
 import { formatMoney, formatSigned, formatShortDate } from "@/lib/format";
 import { getCategoryIcon } from "@/lib/category-icons";
 
@@ -43,16 +43,19 @@ export default async function DashboardPage() {
     redirect("/onboarding");
   }
 
-  const [accounts, transactions, summary] = await Promise.all([
+  const [accounts, transactions, summary, rates] = await Promise.all([
     getAccounts(),
     getTransactions({ limit: 5 }),
     getMonthlySummary(),
+    getRates(),
   ]);
 
-  const totalBalance = getTotalBalance(
-    accounts.map((a) => ({ balance: a.balance, currency: a.currency })),
-  );
   const baseCurrency = profile.base_currency;
+  const { total: totalBalance, partial } = getTotalBalance(
+    accounts.map((a) => ({ balance: a.balance, currency: a.currency })),
+    baseCurrency,
+    rates,
+  );
   const initial = (profile.full_name ?? profile.email ?? "?").charAt(0).toUpperCase();
 
   // Agrupar cuentas por moneda para los netos individuales
@@ -79,6 +82,11 @@ export default async function DashboardPage() {
         <p className="mt-2 font-mono text-3xl font-semibold tabular-nums lg:text-4xl">
           {formatMoney(totalBalance, baseCurrency)}
         </p>
+        {partial && (
+          <p className="mt-1 text-xs opacity-80">
+            Faltan cotizaciones de algunas monedas: el total está incompleto.
+          </p>
+        )}
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs opacity-80">
           {Object.entries(byCurrency).map(([cur, bal]) => (
             <span key={cur} className="font-mono tabular-nums">

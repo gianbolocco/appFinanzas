@@ -3,6 +3,8 @@ import "server-only";
 import { createClient } from "@/lib/supabase-server";
 import { getCurrentUser } from "@/lib/dal";
 import { monthStartLocal } from "@/lib/dates";
+import type { Rate } from "@/lib/money";
+import { sumInBase } from "@/lib/money";
 
 // ----------------------------------------------------------------------------
 // Cuentas
@@ -17,10 +19,35 @@ export async function getAccounts() {
   return data;
 }
 
-export function getTotalBalance(accounts: { balance: number; currency: string }[]) {
-  if (accounts.length === 0) return 0;
-  // Por ahora suma simple asumiendo misma moneda; la conversión se hace en Fase 2 multi-moneda
-  return accounts.reduce((sum, a) => sum + a.balance, 0);
+/** Cotizaciones más recientes disponibles, una por par base/quote. */
+export async function getRates(): Promise<Rate[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("exchange_rates")
+    .select("base, quote, rate, date")
+    .order("date", { ascending: false })
+    .limit(200);
+  if (error) throw error;
+
+  const latest = new Map<string, Rate>();
+  for (const r of data ?? []) {
+    const key = `${r.base}:${r.quote}`;
+    if (!latest.has(key)) latest.set(key, { base: r.base, quote: r.quote, rate: r.rate });
+  }
+  return [...latest.values()];
+}
+
+/**
+ * Suma los saldos convirtiendo a la moneda base.
+ * `partial: true` significa que faltó al menos un rate y el total está incompleto:
+ * la UI debe decirlo en vez de mostrar un número que no significa nada.
+ */
+export function getTotalBalance(
+  accounts: { balance: number; currency: string }[],
+  baseCurrency: string,
+  rates: Rate[],
+): { total: number; partial: boolean } {
+  return sumInBase(accounts, baseCurrency, rates);
 }
 
 // ----------------------------------------------------------------------------

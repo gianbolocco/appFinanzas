@@ -124,3 +124,23 @@ Por ahora no hay botón de logout (va en Fase 3/7). Para resetear:
 - Borrar cookies del sitio en el navegador, o
 - Supabase → **Authentication** → **Users** → eliminar tu usuario, o
 - Supabase → SQL Editor: `delete from public.users where id = '<tu-id>';` + `delete from auth.users where id = '<tu-id>';`
+
+## 11. Cotizaciones automáticas
+
+1. Registrarse en [exchangerate.host](https://exchangerate.host) y copiar el `access_key`.
+2. Cargar el secret y desplegar la función:
+   ```bash
+   supabase secrets set EXCHANGERATE_ACCESS_KEY=<tu-access-key>
+   supabase functions deploy exchange-rates-cron
+   supabase functions invoke exchange-rates-cron   # prueba
+   ```
+3. Guardar en Vault las credenciales que usa el cron (**no van al repo**):
+   ```sql
+   select vault.create_secret('<TU-SERVICE-ROLE-KEY>', 'service_role_key');
+   select vault.create_secret('https://<TU-PROJECT-REF>.supabase.co', 'project_url');
+   ```
+4. Ejecutar `supabase/migrations/0007_exchange_rates_cron.sql`.
+5. Verificar: `select * from cron.job where jobname = 'exchange-rates-daily';`
+
+Sin este paso los totales multi-moneda del dashboard aparecen marcados como
+incompletos, que es el comportamiento correcto: no inventan un número.

@@ -135,7 +135,7 @@ export async function createTransaction(formData: FormData) {
     .single();
 
   const baseCurrency = profile?.base_currency ?? "ARS";
-  const rate = parsed.currency === baseCurrency ? 1 : await fetchRate(supabase, parsed.currency, baseCurrency);
+  const rate = parsed.currency === baseCurrency ? 1 : await fetchRate(supabase, parsed.currency, baseCurrency, parsed.date);
   const amountBase = parsed.amount * rate;
 
   const installments = parsed.installments_total && parsed.installments_total > 1;
@@ -329,7 +329,7 @@ export async function updateTransaction(transactionId: string, formData: FormDat
 
   const { data: profile } = await supabase.from("users").select("base_currency").eq("id", user.id).single();
   const baseCurrency = profile?.base_currency ?? "ARS";
-  const rate = parsed.currency === baseCurrency ? 1 : await fetchRate(supabase, parsed.currency, baseCurrency);
+  const rate = parsed.currency === baseCurrency ? 1 : await fetchRate(supabase, parsed.currency, baseCurrency, parsed.date);
   const amountBase = parsed.amount * rate;
 
   // 1. Revertir el efecto de la transacción original sobre los saldos
@@ -561,7 +561,7 @@ export async function registerSubscriptionPayment(subscriptionId: string) {
   // Crear gasto
   const { data: profile } = await supabase.from("users").select("base_currency").eq("id", user.id).single();
   const baseCurrency = profile?.base_currency ?? "ARS";
-  const rate = sub.currency === baseCurrency ? 1 : await fetchRate(supabase, sub.currency, baseCurrency);
+  const rate = sub.currency === baseCurrency ? 1 : await fetchRate(supabase, sub.currency, baseCurrency, sub.next_date);
 
   const { error: txErr } = await supabase.from("transactions").insert({
     user_id: user.id,
@@ -608,21 +608,46 @@ export async function registerSubscriptionPayment(subscriptionId: string) {
 // ----------------------------------------------------------------------------
 // Helper: buscar rate de conversión
 // ----------------------------------------------------------------------------
+/**
+ * Busca la cotización vigente a la fecha de la transacción.
+ * Si no hay ninguna, cae a 1 y lo deja registrado: un rate faltante
+ * corrompe amount_base en silencio, así que al menos queda rastro.
+ */
 async function fetchRate(
   supabase: Awaited<ReturnType<typeof createClient>>,
   from: string,
   to: string,
+  onDate?: string,
 ): Promise<number> {
   if (from === to) return 1;
-  const { data } = await supabase
+
+  let q = supabase
     .from("exchange_rates")
     .select("rate")
     .eq("base", from)
     .eq("quote", to)
     .order("date", { ascending: false })
-    .limit(1)
-    .single();
-  return data?.rate ?? 1;
+    .limit(1);
+  if (onDate) q = q.lte("date", onDate);
+
+  const { data } = await q.maybeSingle();
+  if (data?.rate) return data.rate;
+
+  // Probar el par inverso antes de rendirse
+  let inv = supabase
+    .from("exchange_rates")
+    .select("rate")
+    .eq("base", to)
+    .eq("quote", from)
+    .order("date", { ascending: false })
+    .limit(1);
+  if (onDate) inv = inv.lte("date", onDate);
+
+  const { data: inverse } = await inv.maybeSingle();
+  if (inverse?.rate) return 1 / inverse.rate;
+
+  console.warn(`[guita] sin cotización ${from}->${to} al ${onDate ?? "hoy"}; usando 1`);
+  return 1;
 }
 
 /**
