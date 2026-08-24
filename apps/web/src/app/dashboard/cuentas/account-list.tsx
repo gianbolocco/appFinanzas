@@ -5,6 +5,7 @@ import { Plus, Trash2, Loader2, Banknote, Landmark, CreditCard, Smartphone, Pigg
 
 import { createAccount, deleteAccount } from "@/lib/actions";
 import { formatMoney } from "@/lib/format";
+import { Modal } from "@/components/modal";
 
 type Account = {
   id: string;
@@ -109,12 +110,18 @@ export function AccountList({
         );
       })}
 
-      {/* Formulario para crear cuenta */}
-      {showForm ? (
-        <form
-          onSubmit={handleSubmit}
-          className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm"
-        >
+      {/* Botón agregar cuenta */}
+      <button
+        onClick={() => setShowForm(true)}
+        className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-card/50 text-sm font-medium text-muted-foreground transition hover:border-primary hover:text-primary"
+      >
+        <Plus className="h-5 w-5" />
+        Agregar cuenta
+      </button>
+
+      {/* Modal crear cuenta */}
+      <Modal open={showForm} onClose={() => setShowForm(false)} title="Nueva cuenta">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium">Nombre</label>
             <input
@@ -179,15 +186,7 @@ export function AccountList({
             </button>
           </div>
         </form>
-      ) : (
-        <button
-          onClick={() => setShowForm(true)}
-          className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-card/50 text-sm font-medium text-muted-foreground transition hover:border-primary hover:text-primary"
-        >
-          <Plus className="h-5 w-5" />
-          Agregar cuenta
-        </button>
-      )}
+      </Modal>
     </div>
   );
 }

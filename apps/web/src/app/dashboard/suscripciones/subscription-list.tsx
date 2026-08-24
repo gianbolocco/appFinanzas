@@ -24,6 +24,7 @@ import {
   registerSubscriptionPayment,
 } from "@/lib/actions";
 import { formatMoney, formatDate } from "@/lib/format";
+import { Modal } from "@/components/modal";
 
 type Subscription = {
   id: string;
@@ -300,8 +301,21 @@ export function SubscriptionList({
         </section>
       )}
 
-      {/* Formulario crear/editar */}
-      {showForm ? (
+      {/* Botón nueva suscripción */}
+      <button
+        onClick={openNew}
+        className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-card/50 text-sm font-medium text-muted-foreground transition hover:border-primary hover:text-primary"
+      >
+        <Plus className="h-5 w-5" />
+        Nueva suscripción
+      </button>
+
+      {/* Modal crear/editar */}
+      <Modal
+        open={showForm}
+        onClose={closeForm}
+        title={editing ? "Editar suscripción" : "Nueva suscripción"}
+      >
         <SubscriptionForm
           key={editing?.id ?? "new"}
           editing={editing}
@@ -314,15 +328,7 @@ export function SubscriptionList({
           onCancel={closeForm}
           onDelete={editing ? () => handleDelete(editing.id) : undefined}
         />
-      ) : (
-        <button
-          onClick={openNew}
-          className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-card/50 text-sm font-medium text-muted-foreground transition hover:border-primary hover:text-primary"
-        >
-          <Plus className="h-5 w-5" />
-          Nueva suscripción
-        </button>
-      )}
+      </Modal>
     </div>
   );
 }
@@ -351,10 +357,8 @@ function SubscriptionForm({
   return (
     <form
       onSubmit={onSubmit}
-      className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm"
+      className="flex flex-col gap-3"
     >
-      <h3 className="text-sm font-semibold">{editing ? "Editar suscripción" : "Nueva suscripción"}</h3>
-
       <div className="flex flex-col gap-1.5">
         <label className="text-sm font-medium">Nombre</label>
         <input

@@ -5,6 +5,7 @@ import { Plus, Trash2, Loader2, Archive, Target, ChevronDown, ChevronUp } from "
 
 import { createGoal, deleteGoal, archiveGoal, contributeToGoal } from "@/lib/actions";
 import { formatMoney, formatDate } from "@/lib/format";
+import { Modal } from "@/components/modal";
 
 type Goal = {
   id: string;
@@ -225,13 +226,18 @@ export function GoalList({ goals, baseCurrency }: { goals: Goal[]; baseCurrency:
         </section>
       )}
 
-      {/* Formulario crear */}
-      {showForm ? (
-        <form
-          onSubmit={handleSubmit}
-          className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm"
-        >
-          <h3 className="text-sm font-semibold">Nueva meta</h3>
+      {/* Botón nueva meta */}
+      <button
+        onClick={() => setShowForm(true)}
+        className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-card/50 text-sm font-medium text-muted-foreground transition hover:border-primary hover:text-primary"
+      >
+        <Plus className="h-5 w-5" />
+        Nueva meta
+      </button>
+
+      {/* Modal crear */}
+      <Modal open={showForm} onClose={() => setShowForm(false)} title="Nueva meta">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium">Nombre</label>
             <input
@@ -262,6 +268,7 @@ export function GoalList({ goals, baseCurrency }: { goals: Goal[]; baseCurrency:
             />
           </div>
           <input type="hidden" name="currency" value={baseCurrency} />
+          {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex gap-2">
             <button
               type="button"
@@ -279,15 +286,7 @@ export function GoalList({ goals, baseCurrency }: { goals: Goal[]; baseCurrency:
             </button>
           </div>
         </form>
-      ) : (
-        <button
-          onClick={() => setShowForm(true)}
-          className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-card/50 text-sm font-medium text-muted-foreground transition hover:border-primary hover:text-primary"
-        >
-          <Plus className="h-5 w-5" />
-          Nueva meta
-        </button>
-      )}
+      </Modal>
     </div>
   );
 }

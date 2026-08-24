@@ -6,6 +6,7 @@ import { Plus, Trash2, Loader2 } from "lucide-react";
 import { createBudget, deleteBudget } from "@/lib/actions";
 import { formatMoney } from "@/lib/format";
 import { getCategoryIcon } from "@/lib/category-icons";
+import { Modal } from "@/components/modal";
 
 type Budget = {
   id: string;
@@ -131,13 +132,18 @@ export function BudgetList({
         })}
       </div>
 
-      {/* Formulario crear */}
-      {showForm ? (
-        <form
-          onSubmit={handleSubmit}
-          className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm"
-        >
-          <h3 className="text-sm font-semibold">Nuevo presupuesto</h3>
+      {/* Botón nuevo presupuesto */}
+      <button
+        onClick={() => setShowForm(true)}
+        className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-card/50 text-sm font-medium text-muted-foreground transition hover:border-primary hover:text-primary"
+      >
+        <Plus className="h-5 w-5" />
+        Nuevo presupuesto
+      </button>
+
+      {/* Modal crear */}
+      <Modal open={showForm} onClose={() => setShowForm(false)} title="Nuevo presupuesto">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium">Categoría</label>
             <select
@@ -166,6 +172,9 @@ export function BudgetList({
           <input type="hidden" name="currency" value={baseCurrency} />
           <input type="hidden" name="period" value="monthly" />
           {error && <p className="text-sm text-destructive">{error}</p>}
+          {availableCategories.length === 0 && (
+            <p className="text-xs text-muted-foreground">Ya tenés presupuesto para todas las categorías.</p>
+          )}
           <div className="flex gap-2">
             <button
               type="button"
@@ -182,19 +191,8 @@ export function BudgetList({
               {pending ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : "Crear"}
             </button>
           </div>
-          {availableCategories.length === 0 && (
-            <p className="text-xs text-muted-foreground">Ya tenés presupuesto para todas las categorías.</p>
-          )}
         </form>
-      ) : (
-        <button
-          onClick={() => setShowForm(true)}
-          className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-card/50 text-sm font-medium text-muted-foreground transition hover:border-primary hover:text-primary"
-        >
-          <Plus className="h-5 w-5" />
-          Nuevo presupuesto
-        </button>
-      )}
+      </Modal>
     </div>
   );
 }

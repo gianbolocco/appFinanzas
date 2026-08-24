@@ -5,6 +5,7 @@ import { Plus, Trash2, Loader2, Pencil, type LucideIcon } from "lucide-react";
 
 import { createCategory, updateCategory, deleteCategory } from "@/lib/actions";
 import { getCategoryIcon, ICON_NAMES } from "@/lib/category-icons";
+import { Modal } from "@/components/modal";
 
 type Category = {
   id: string;
@@ -169,26 +170,30 @@ export function CategoryList({ categories }: { categories: Category[] }) {
           </div>
         )}
 
-        {showForm ? (
-          <CategoryForm
-            key={editing?.id ?? "new"}
-            editing={editing}
-            pending={pending}
-            error={error}
-            onSubmit={handleSubmit}
-            onCancel={closeForm}
-            onDelete={editing ? () => handleDelete(editing.id) : undefined}
-          />
-        ) : (
-          <button
-            onClick={openNew}
-            className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-card/50 text-sm font-medium text-muted-foreground transition hover:border-primary hover:text-primary"
-          >
-            <Plus className="h-5 w-5" />
-            Nueva categoría
-          </button>
-        )}
+        <button
+          onClick={openNew}
+          className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-card/50 text-sm font-medium text-muted-foreground transition hover:border-primary hover:text-primary"
+        >
+          <Plus className="h-5 w-5" />
+          Nueva categoría
+        </button>
       </section>
+
+      <Modal
+        open={showForm}
+        onClose={closeForm}
+        title={editing ? "Editar categoría" : "Nueva categoría"}
+      >
+        <CategoryForm
+          key={editing?.id ?? "new"}
+          editing={editing}
+          pending={pending}
+          error={error}
+          onSubmit={handleSubmit}
+          onCancel={closeForm}
+          onDelete={editing ? () => handleDelete(editing.id) : undefined}
+        />
+      </Modal>
     </div>
   );
 }
@@ -213,10 +218,8 @@ function CategoryForm({
   return (
     <form
       onSubmit={onSubmit}
-      className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm"
+      className="flex flex-col gap-3"
     >
-      <h3 className="text-sm font-semibold">{editing ? "Editar categoría" : "Nueva categoría"}</h3>
-
       {/* Preview */}
       <div className="flex items-center gap-3 rounded-xl bg-muted/50 p-3">
         <PreviewIcon iconName={selectedIcon} color={editing?.color ?? COLORS[0]} />
