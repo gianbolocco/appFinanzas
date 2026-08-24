@@ -142,7 +142,7 @@ export function BudgetList({
       </button>
 
       {/* Modal crear */}
-      <Modal open={showForm} onClose={() => setShowForm(false)} title="Nuevo presupuesto">
+      <Modal open={showForm} onOpenChange={(o) => { if (!o) setShowForm(false) }} title="Nuevo presupuesto">
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium">Categoría</label>

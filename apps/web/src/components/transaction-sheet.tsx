@@ -2,9 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { X, Loader2, Trash2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 import { createTransaction, updateTransaction, deleteTransaction } from "@/lib/actions";
+import { Modal } from "@/components/modal";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 
 type Account = { id: string; name: string; type: string; currency: string };
 type Category = {
@@ -32,48 +35,52 @@ type EditingTx = {
 const TYPE_TABS = [
   { value: "expense", label: "Gasto" },
   { value: "income", label: "Ingreso" },
-  { value: "transfer", label: "Transfer" },
+  { value: "transfer", label: "Transferencia" },
 ] as const;
 
 const CURRENCIES = ["ARS", "USD", "EUR", "BRL", "MXN", "CLP", "COP", "PEN", "UYU"];
 
 export function TransactionSheet({
   open,
-  onClose,
+  onOpenChange,
   accounts,
   categories,
   baseCurrency,
   editingTx,
 }: {
   open: boolean;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
   accounts: Account[];
   categories: Category[];
   baseCurrency: string;
   editingTx?: EditingTx;
 }) {
-  if (!open) return null;
-
   return (
-    <TransactionSheetInner
-      key={editingTx?.id ?? "new"}
-      onClose={onClose}
-      accounts={accounts}
-      categories={categories}
-      baseCurrency={baseCurrency}
-      editingTx={editingTx ?? null}
-    />
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      title={editingTx ? "Editar movimiento" : "Nuevo movimiento"}
+    >
+      <TransactionSheetInner
+        key={editingTx?.id ?? "new"}
+        onOpenChange={onOpenChange}
+        accounts={accounts}
+        categories={categories}
+        baseCurrency={baseCurrency}
+        editingTx={editingTx ?? null}
+      />
+    </Modal>
   );
 }
 
 function TransactionSheetInner({
-  onClose,
+  onOpenChange,
   accounts,
   categories,
   baseCurrency,
   editingTx,
 }: {
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
   accounts: Account[];
   categories: Category[];
   baseCurrency: string;
@@ -82,6 +89,7 @@ function TransactionSheetInner({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const isEditing = !!editingTx;
   const isInstallmentChild = !!editingTx?.parent_transaction_id;
@@ -109,6 +117,10 @@ function TransactionSheetInner({
     type === "transfer" ? c.kind === "transfer" : c.kind === type,
   );
 
+  function close() {
+    onOpenChange(false);
+  }
+
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
@@ -125,261 +137,260 @@ function TransactionSheetInner({
       try {
         if (isEditing && editingTx) {
           await updateTransaction(editingTx.id, fd);
+          toast.success("Movimiento actualizado");
         } else {
           await createTransaction(fd);
+          toast.success("Movimiento creado");
         }
         router.refresh();
-        onClose();
+        close();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Error al guardar");
+        const msg = err instanceof Error ? err.message : "Error al guardar";
+        setError(msg);
+        toast.error(msg);
       }
     });
   }
 
   function handleDelete() {
-    if (!editingTx || !confirm("¿Eliminar este movimiento?")) return;
+    if (!editingTx) return;
     startTransition(async () => {
       try {
         await deleteTransaction(editingTx.id);
+        toast.success("Movimiento eliminado");
         router.refresh();
-        onClose();
+        setConfirmDelete(false);
+        close();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Error al eliminar");
+        const msg = err instanceof Error ? err.message : "Error al eliminar";
+        setError(msg);
+        toast.error(msg);
+        setConfirmDelete(false);
       }
     });
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 lg:items-center"
-      onClick={onClose}
-    >
-      <div
-        className="flex max-h-[92vh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-background shadow-xl lg:rounded-3xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex justify-center pt-2 lg:hidden">
-          <div className="h-1 w-10 rounded-full bg-muted-foreground/30" />
+    <>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <input type="hidden" name="type" value={type} />
+
+        {/* Tipo */}
+        <div className="flex gap-1 rounded-xl bg-muted p-1">
+          {TYPE_TABS.map((t) => (
+            <button
+              key={t.value}
+              type="button"
+              onClick={() => setType(t.value)}
+              className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition ${type === t.value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
-        <header className="flex items-center justify-between border-b border-border px-5 py-4">
-          <h2 className="text-base font-semibold">
-            {isEditing ? "Editar movimiento" : "Nuevo movimiento"}
-          </h2>
-          <button onClick={onClose} className="rounded-lg p-1 text-muted-foreground hover:bg-accent">
-            <X className="h-5 w-5" />
-          </button>
-        </header>
 
-        <form onSubmit={handleSubmit} className="flex flex-1 flex-col gap-4 overflow-y-auto p-5">
-          <input type="hidden" name="type" value={type} />
-
-          {/* Tipo */}
-          <div className="flex gap-1 rounded-xl bg-muted p-1">
-            {TYPE_TABS.map((t) => (
-              <button
-                key={t.value}
-                type="button"
-                onClick={() => setType(t.value)}
-                className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${type === t.value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Monto */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium">Monto</label>
-            <div className="flex gap-2">
-              <input
-                name="amount"
-                type="number"
-                step="0.01"
-                inputMode="decimal"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0,00"
-                required
-                autoFocus
-                className="h-12 flex-1 rounded-xl border border-input bg-card px-4 font-mono text-lg tabular-nums outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-              />
-              <select
-                name="currency"
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
-                className="h-12 w-24 rounded-xl border border-input bg-card px-2 text-sm outline-none focus:border-primary"
-              >
-                {CURRENCIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Cuenta origen */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium">Cuenta</label>
+        {/* Monto */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium">Monto</label>
+          <div className="flex gap-2">
+            <input
+              name="amount"
+              type="number"
+              step="0.01"
+              inputMode="decimal"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="0,00"
+              required
+              autoFocus
+              className="h-12 flex-1 rounded-xl border border-input bg-card px-4 font-mono text-lg tabular-nums outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+            />
             <select
-              name="account_id"
-              value={accountId}
-              onChange={(e) => setAccountId(e.target.value)}
+              name="currency"
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+              className="h-12 w-24 rounded-xl border border-input bg-card px-2 text-sm outline-none focus:border-primary"
+            >
+              {CURRENCIES.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Cuenta origen */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium">Cuenta</label>
+          <select
+            name="account_id"
+            value={accountId}
+            onChange={(e) => setAccountId(e.target.value)}
+            className="h-12 rounded-xl border border-input bg-card px-3 text-sm outline-none focus:border-primary"
+          >
+            {accounts.length === 0 && <option value="">Sin cuentas</option>}
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>{a.name} · {a.currency}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Cuenta destino (solo transferencias) */}
+        {type === "transfer" && (
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium">Cuenta destino</label>
+            <select
+              name="to_account_id"
+              value={toAccountId}
+              onChange={(e) => setToAccountId(e.target.value)}
               className="h-12 rounded-xl border border-input bg-card px-3 text-sm outline-none focus:border-primary"
             >
-              {accounts.length === 0 && <option value="">Sin cuentas</option>}
+              <option value="">Elegí destino</option>
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>{a.name} · {a.currency}</option>
               ))}
             </select>
           </div>
+        )}
 
-          {/* Cuenta destino (solo transferencias) */}
-          {type === "transfer" && (
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium">Cuenta destino</label>
-              <select
-                name="to_account_id"
-                value={toAccountId}
-                onChange={(e) => setToAccountId(e.target.value)}
-                className="h-12 rounded-xl border border-input bg-card px-3 text-sm outline-none focus:border-primary"
-              >
-                <option value="">Elegí destino</option>
-                {accounts.map((a) => (
-                  <option key={a.id} value={a.id}>{a.name} · {a.currency}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Rate para transferencias entre distintas moneda */}
-          {isCrossCurrency && (
-            <div className="flex flex-col gap-1.5 rounded-xl bg-muted/50 p-3">
-              <label className="text-sm font-medium">
-                Tipo de cambio: 1 {fromAccount?.currency} = ?
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  name="dest_rate"
-                  type="number"
-                  step="0.0001"
-                  inputMode="decimal"
-                  value={destRate}
-                  onChange={(e) => setDestRate(e.target.value)}
-                  placeholder="Ej.: 1200"
-                  required
-                  className="h-11 flex-1 rounded-xl border border-input bg-background px-3 font-mono text-sm tabular-nums outline-none focus:border-primary"
-                />
-                <span className="text-sm font-medium text-muted-foreground">{toAccount?.currency}</span>
-              </div>
-              {destAmount !== null && (
-                <p className="text-xs text-muted-foreground">
-                  Recibe {destAmount.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{" "}
-                  {toAccount?.currency}
-                </p>
-              )}
-            </div>
-          )}
-          {type === "transfer" && !isCrossCurrency && (
-            <input type="hidden" name="dest_rate" value="1" />
-          )}
-
-          {/* Categoría (no transferencias) */}
-          {type !== "transfer" && (
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium">Categoría</label>
-              <select
-                name="category_id"
-                value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-                className="h-12 rounded-xl border border-input bg-card px-3 text-sm outline-none focus:border-primary"
-              >
-                <option value="">Sin categoría</option>
-                {filteredCategories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.is_predefined ? "★ " : ""}{c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Fecha */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium">Fecha</label>
-            <input
-              name="date"
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="h-12 rounded-xl border border-input bg-card px-3 text-sm outline-none focus:border-primary"
-            />
-          </div>
-
-          {/* Nota */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium">Nota (opcional)</label>
-            <input
-              name="note"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Ej.: super del mes"
-              maxLength={200}
-              className="h-12 rounded-xl border border-input bg-card px-3 text-sm outline-none focus:border-primary"
-            />
-          </div>
-
-          {/* Cuotas (solo gastos nuevos — no en edición) */}
-          {type === "expense" && !isEditing && (
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium">Cuotas (opcional)</label>
+        {/* Rate para transferencias entre distinta moneda */}
+        {isCrossCurrency && (
+          <div className="flex flex-col gap-1.5 rounded-xl bg-muted/50 p-3">
+            <label className="text-sm font-medium">
+              Tipo de cambio: 1 {fromAccount?.currency} = ?
+            </label>
+            <div className="flex items-center gap-2">
               <input
-                name="installments_total"
+                name="dest_rate"
                 type="number"
-                min="1"
-                max="60"
-                value={installments}
-                onChange={(e) => setInstallments(e.target.value)}
-                placeholder="1 (pago único)"
-                className="h-12 rounded-xl border border-input bg-card px-3 text-sm outline-none focus:border-primary"
+                step="0.0001"
+                inputMode="decimal"
+                value={destRate}
+                onChange={(e) => setDestRate(e.target.value)}
+                placeholder="Ej.: 1200"
+                required
+                className="h-11 flex-1 rounded-xl border border-input bg-background px-3 font-mono text-sm tabular-nums outline-none focus:border-primary"
               />
-              {installments && Number(installments) > 1 && amount && (
-                <p className="text-xs text-muted-foreground">
-                  {Number(installments)} cuotas de ${" "}
-                  {(Number(amount) / Number(installments)).toLocaleString("es-AR", { minimumFractionDigits: 2 })}
-                  {" "}{currency}
-                </p>
-              )}
+              <span className="text-sm font-medium text-muted-foreground">{toAccount?.currency}</span>
             </div>
-          )}
-
-          {isInstallmentChild && (
-            <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
-              Esta es una cuota de una compra en cuotas. Editá la transacción padre para modificarla.
-            </p>
-          )}
-
-          {error && <p className="text-sm text-destructive">{error}</p>}
-
-          <div className="mt-2 flex gap-2">
-            {isEditing && (
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={pending}
-                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-border bg-card text-destructive transition hover:bg-destructive/5 active:scale-[0.98] disabled:opacity-50"
-              >
-                <Trash2 className="h-5 w-5" />
-              </button>
+            {destAmount !== null && (
+              <p className="text-xs text-muted-foreground">
+                Recibe {destAmount.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{" "}
+                {toAccount?.currency}
+              </p>
             )}
-            <button
-              type="submit"
-              disabled={pending || accounts.length === 0}
-              className="flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground transition hover:opacity-90 active:scale-[0.98] disabled:opacity-50"
-            >
-              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : isEditing ? "Guardar cambios" : "Guardar"}
-            </button>
           </div>
-        </form>
-      </div>
-    </div>
+        )}
+        {type === "transfer" && !isCrossCurrency && (
+          <input type="hidden" name="dest_rate" value="1" />
+        )}
+
+        {/* Categoría (no transferencias) */}
+        {type !== "transfer" && (
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium">Categoría</label>
+            <select
+              name="category_id"
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              className="h-12 rounded-xl border border-input bg-card px-3 text-sm outline-none focus:border-primary"
+            >
+              <option value="">Sin categoría</option>
+              {filteredCategories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.is_predefined ? "★ " : ""}{c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Fecha */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium">Fecha</label>
+          <input
+            name="date"
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="h-12 rounded-xl border border-input bg-card px-3 text-sm outline-none focus:border-primary"
+          />
+        </div>
+
+        {/* Nota */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium">Nota (opcional)</label>
+          <input
+            name="note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Ej.: super del mes"
+            maxLength={200}
+            className="h-12 rounded-xl border border-input bg-card px-3 text-sm outline-none focus:border-primary"
+          />
+        </div>
+
+        {/* Cuotas (solo gastos nuevos — no en edición) */}
+        {type === "expense" && !isEditing && (
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium">Cuotas (opcional)</label>
+            <input
+              name="installments_total"
+              type="number"
+              min="1"
+              max="60"
+              value={installments}
+              onChange={(e) => setInstallments(e.target.value)}
+              placeholder="1 (pago único)"
+              className="h-12 rounded-xl border border-input bg-card px-3 text-sm outline-none focus:border-primary"
+            />
+            {installments && Number(installments) > 1 && amount && (
+              <p className="text-xs text-muted-foreground">
+                {Number(installments)} cuotas de ${" "}
+                {(Number(amount) / Number(installments)).toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                {" "}{currency}
+              </p>
+            )}
+          </div>
+        )}
+
+        {isInstallmentChild && (
+          <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+            Esta es una cuota de una compra en cuotas. Editá la transacción padre para modificarla.
+          </p>
+        )}
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+
+        <div className="mt-2 flex gap-2">
+          {isEditing && (
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+              disabled={pending}
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-border bg-card text-destructive transition hover:bg-destructive/5 active:scale-[0.98] disabled:opacity-50"
+            >
+              <Trash2 className="h-5 w-5" />
+            </button>
+          )}
+          <button
+            type="submit"
+            disabled={pending || accounts.length === 0}
+            className="flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground transition hover:opacity-90 active:scale-[0.98] disabled:opacity-50"
+          >
+            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : isEditing ? "Guardar cambios" : "Guardar"}
+          </button>
+        </div>
+      </form>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="¿Eliminar movimiento?"
+        description="Esta acción no se puede deshacer. Se borrarán la transacción y, si es una compra en cuotas, todas las cuotas asociadas."
+        confirmLabel="Eliminar"
+        destructive
+        onConfirm={handleDelete}
+      />
+    </>
   );
 }

@@ -313,7 +313,7 @@ export function SubscriptionList({
       {/* Modal crear/editar */}
       <Modal
         open={showForm}
-        onClose={closeForm}
+        onOpenChange={(o) => { if (!o) closeForm() }}
         title={editing ? "Editar suscripción" : "Nueva suscripción"}
       >
         <SubscriptionForm

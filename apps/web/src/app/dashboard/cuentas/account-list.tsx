@@ -6,6 +6,8 @@ import { Plus, Trash2, Loader2, Banknote, Landmark, CreditCard, Smartphone, Pigg
 import { createAccount, deleteAccount } from "@/lib/actions";
 import { formatMoney } from "@/lib/format";
 import { Modal } from "@/components/modal";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { toast } from "sonner";
 
 type Account = {
   id: string;
@@ -46,6 +48,7 @@ export function AccountList({
   const [showForm, setShowForm] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -54,21 +57,28 @@ export function AccountList({
     startTransition(async () => {
       try {
         await createAccount(fd);
+        toast.success("Cuenta creada");
         (e.target as HTMLFormElement).reset();
         setShowForm(false);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Error");
+        const msg = err instanceof Error ? err.message : "Error al crear";
+        setError(msg);
+        toast.error(msg);
       }
     });
   }
 
   function handleDelete(id: string) {
-    if (!confirm("¿Eliminar esta cuenta? Se borrarán sus movimientos.")) return;
     startTransition(async () => {
       try {
         await deleteAccount(id);
+        toast.success("Cuenta eliminada");
+        setConfirmDelete(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Error");
+        const msg = err instanceof Error ? err.message : "Error al eliminar";
+        setError(msg);
+        toast.error(msg);
+        setConfirmDelete(null);
       }
     });
   }
@@ -101,7 +111,7 @@ export function AccountList({
               {formatMoney(a.balance, a.currency)}
             </p>
             <button
-              onClick={() => handleDelete(a.id)}
+              onClick={() => setConfirmDelete(a.id)}
               className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
             >
               <Trash2 className="h-4 w-4" />
@@ -120,7 +130,7 @@ export function AccountList({
       </button>
 
       {/* Modal crear cuenta */}
-      <Modal open={showForm} onClose={() => setShowForm(false)} title="Nueva cuenta">
+      <Modal open={showForm} onOpenChange={(o) => { if (!o) setShowForm(false) }} title="Nueva cuenta">
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium">Nombre</label>
@@ -187,6 +197,16 @@ export function AccountList({
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onOpenChange={(o) => { if (!o) setConfirmDelete(null) }}
+        title="¿Eliminar cuenta?"
+        description="Se borrarán la cuenta y todos sus movimientos. Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        destructive
+        onConfirm={() => confirmDelete && handleDelete(confirmDelete)}
+      />
     </div>
   );
 }

@@ -236,7 +236,7 @@ export function GoalList({ goals, baseCurrency }: { goals: Goal[]; baseCurrency:
       </button>
 
       {/* Modal crear */}
-      <Modal open={showForm} onClose={() => setShowForm(false)} title="Nueva meta">
+      <Modal open={showForm} onOpenChange={(o) => { if (!o) setShowForm(false) }} title="Nueva meta">
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium">Nombre</label>

@@ -67,7 +67,7 @@ export function BottomNav({
 
       <TransactionSheet
         open={sheetOpen}
-        onClose={() => setSheetOpen(false)}
+        onOpenChange={(o) => { if (!o) setSheetOpen(false) }}
         accounts={accounts}
         categories={categories}
         baseCurrency={baseCurrency}

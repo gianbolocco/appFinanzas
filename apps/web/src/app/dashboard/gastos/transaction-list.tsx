@@ -221,7 +221,7 @@ export function TransactionList({
 
       <TransactionSheet
         open={sheetOpen}
-        onClose={closeSheet}
+        onOpenChange={(o) => { if (!o) closeSheet() }}
         accounts={accounts}
         categories={categories}
         baseCurrency={baseCurrency}

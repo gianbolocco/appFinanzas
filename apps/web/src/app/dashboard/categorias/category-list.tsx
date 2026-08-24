@@ -181,7 +181,7 @@ export function CategoryList({ categories }: { categories: Category[] }) {
 
       <Modal
         open={showForm}
-        onClose={closeForm}
+        onOpenChange={(o) => { if (!o) closeForm() }}
         title={editing ? "Editar categoría" : "Nueva categoría"}
       >
         <CategoryForm
