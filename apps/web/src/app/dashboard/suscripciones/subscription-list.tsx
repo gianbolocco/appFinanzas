@@ -187,14 +187,14 @@ export function SubscriptionList({
           </p>
           <button
             onClick={() => openEdit(s)}
-            className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-accent hover:text-foreground lg:opacity-0 lg:group-hover:opacity-100"
+            className="rounded-lg p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground"
             aria-label="Editar"
           >
             <Pencil className="h-4 w-4" />
           </button>
           <button
             onClick={() => setExpandedId(isExpanded ? null : s.id)}
-            className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-accent"
+            className="rounded-lg p-2 text-muted-foreground transition hover:bg-accent"
             aria-label="Historial"
           >
             {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
