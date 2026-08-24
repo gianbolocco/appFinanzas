@@ -129,6 +129,7 @@ export async function getAccountTransactions(accountId: string) {
     .select(
       "*, category:categories(*), account:accounts!transactions_account_id_fkey(*), to_account:accounts!transactions_to_account_id_fkey(*)",
     )
+    .eq("is_installment_parent", false)
     .or(`account_id.eq.${accountId},to_account_id.eq.${accountId}`)
     .order("date", { ascending: false })
     .order("created_at", { ascending: false });
@@ -154,6 +155,7 @@ export async function getBudgets() {
   const { data: expenses } = await supabase
     .from("transactions")
     .select("category_id, amount, amount_base")
+    .eq("is_installment_parent", false)
     .eq("type", "expense")
     .gte("date", from);
 
@@ -279,6 +281,7 @@ export async function getCategoryBreakdown(opts?: { from?: string; to?: string }
   let q = supabase
     .from("transactions")
     .select("amount, amount_base, currency, category:categories(id, name, color, icon)")
+    .eq("is_installment_parent", false)
     .eq("type", "expense");
 
   if (opts?.from) q = q.gte("date", opts.from);
@@ -321,6 +324,8 @@ export async function getMonthlyTrends() {
       const { data } = await supabase
         .from("transactions")
         .select("type, amount")
+        .eq("is_installment_parent", false)
+        .in("type", ["income", "expense"])
         .gte("date", m.from)
         .lte("date", m.to);
       let income = 0;
@@ -346,8 +351,19 @@ export async function getMonthComparison() {
   const prevTo = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().slice(0, 10);
 
   const [currRes, prevRes] = await Promise.all([
-    supabase.from("transactions").select("type, amount").gte("date", thisFrom),
-    supabase.from("transactions").select("type, amount").gte("date", prevFrom).lte("date", prevTo),
+    supabase
+      .from("transactions")
+      .select("type, amount")
+      .eq("is_installment_parent", false)
+      .in("type", ["income", "expense"])
+      .gte("date", thisFrom),
+    supabase
+      .from("transactions")
+      .select("type, amount")
+      .eq("is_installment_parent", false)
+      .in("type", ["income", "expense"])
+      .gte("date", prevFrom)
+      .lte("date", prevTo),
   ]);
 
   function sum(data: { type: string; amount: number }[]) {
@@ -372,6 +388,7 @@ export async function getBreakdownByAccount(opts?: { from?: string; to?: string 
   let q = supabase
     .from("transactions")
     .select("amount, type, account:accounts!transactions_account_id_fkey(id, name, type)")
+    .eq("is_installment_parent", false)
     .in("type", ["expense", "income"]);
 
   if (opts?.from) q = q.gte("date", opts.from);
@@ -408,6 +425,7 @@ export async function getTransactions(opts?: {
     .select(
       "*, category:categories(*), account:accounts!transactions_account_id_fkey(*), to_account:accounts!transactions_to_account_id_fkey(*)",
     )
+    .eq("is_installment_parent", false)
     .order("date", { ascending: false })
     .order("created_at", { ascending: false });
 

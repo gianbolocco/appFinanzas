@@ -12,6 +12,8 @@ import {
   contributionFormSchema,
   subscriptionFormSchema,
 } from "@/lib/schemas";
+import { todayLocal } from "@/lib/dates";
+import { splitInstallments, installmentDates, dueThrough } from "@/lib/money";
 
 // ----------------------------------------------------------------------------
 // Cuentas
@@ -140,7 +142,8 @@ export async function createTransaction(formData: FormData) {
   const installmentsCount = parsed.installments_total ?? 1;
 
   if (installments) {
-    // Crear transacción padre (sin amount imputado) + N hijas
+    // El padre guarda la compra original: monto total, sin número de cuota.
+    // is_installment_parent (columna generada) lo excluye de listas y agregados.
     const { data: parent, error: parentErr } = await supabase
       .from("transactions")
       .insert({
@@ -161,33 +164,37 @@ export async function createTransaction(formData: FormData) {
       .single();
     if (parentErr) throw parentErr;
 
-    const installmentAmount = parsed.amount / installmentsCount;
-    const installmentBase = amountBase / installmentsCount;
-    const baseDate = new Date(parsed.date + "T00:00:00");
+    const amounts = splitInstallments(parsed.amount, installmentsCount);
+    const bases = splitInstallments(amountBase, installmentsCount);
+    const dates = installmentDates(parsed.date, installmentsCount);
 
-    const children = Array.from({ length: installmentsCount }, (_, i) => {
-      const d = new Date(baseDate);
-      d.setMonth(d.getMonth() + i);
-      return {
-        user_id: user.id,
-        type: parsed.type,
-        amount: Math.round(installmentAmount * 100) / 100,
-        currency: parsed.currency,
-        amount_base: Math.round(installmentBase * 100) / 100,
-        exchange_rate: rate,
-        category_id: parsed.category_id,
-        account_id: parsed.account_id,
-        note: parsed.note ? `${parsed.note} (cuota ${i + 1}/${installmentsCount})` : `Cuota ${i + 1}/${installmentsCount}`,
-        date: d.toISOString().slice(0, 10),
-        source: "manual",
-        installments_total: installmentsCount,
-        installment_number: i + 1,
-        parent_transaction_id: parent.id,
-      };
-    });
+    const children = amounts.map((amount, i) => ({
+      user_id: user.id,
+      type: parsed.type,
+      amount,
+      currency: parsed.currency,
+      amount_base: bases[i],
+      exchange_rate: rate,
+      category_id: parsed.category_id,
+      account_id: parsed.account_id,
+      note: parsed.note
+        ? `${parsed.note} (cuota ${i + 1}/${installmentsCount})`
+        : `Cuota ${i + 1}/${installmentsCount}`,
+      date: dates[i],
+      source: "manual",
+      installments_total: installmentsCount,
+      installment_number: i + 1,
+      parent_transaction_id: parent.id,
+    }));
 
     const { error: childErr } = await supabase.from("transactions").insert(children);
     if (childErr) throw childErr;
+
+    // El saldo se mueve por cuota vencida, no por el total de la compra.
+    const vencidas = dueThrough(dates, todayLocal());
+    const montoVencido = amounts.slice(0, vencidas).reduce((s, a) => s + a, 0);
+    const sign = parsed.type === "income" ? 1 : -1;
+    await applyBalance(supabase, parsed.account_id, sign * montoVencido);
   } else if (parsed.type === "transfer" && parsed.to_account_id) {
     // Una transferencia es UNA fila: origen en account_id, destino en to_account_id.
     // amount queda en la moneda del origen; dest_amount en la del destino.
@@ -260,8 +267,22 @@ export async function deleteTransaction(transactionId: string) {
   if (!tx) return;
   if (tx.parent_transaction_id) throw new Error("No se pueden borrar cuotas individuales");
 
-  // Revertir saldos. Una transferencia es una sola fila: revierte las dos puntas.
-  if (tx.type === "transfer") {
+  // Revertir saldos.
+  if (tx.is_installment_parent) {
+    // Se restaron solo las cuotas vencidas al crear: hay que devolver eso mismo,
+    // no el total de la compra. Las hijas se van por cascade.
+    const { data: children } = await supabase
+      .from("transactions")
+      .select("amount, date")
+      .eq("parent_transaction_id", tx.id);
+
+    const today = todayLocal();
+    const montoVencido = (children ?? [])
+      .filter((c) => c.date <= today)
+      .reduce((s, c) => s + c.amount, 0);
+    const sign = tx.type === "income" ? -1 : 1;
+    await applyBalance(supabase, tx.account_id, sign * montoVencido);
+  } else if (tx.type === "transfer") {
     await applyBalance(supabase, tx.account_id, tx.amount);
     await applyBalance(supabase, tx.to_account_id, -(tx.dest_amount ?? tx.amount));
   } else {
