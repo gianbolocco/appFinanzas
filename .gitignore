@@ -54,3 +54,6 @@ supabase/.env
 
 # OS
 *.swp
+
+# Claude worktrees
+.claude/worktrees/
