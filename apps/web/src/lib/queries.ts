@@ -52,7 +52,9 @@ export async function getTransactions(opts?: {
   const supabase = await createClient();
   let q = supabase
     .from("transactions")
-    .select("*, category:categories(*), account:accounts(*), to_account:accounts!to_account_id(*)")
+    .select(
+      "*, category:categories(*), account:accounts!transactions_account_id_fkey(*), to_account:accounts!transactions_to_account_id_fkey(*)",
+    )
     .order("date", { ascending: false })
     .order("created_at", { ascending: false });
 
