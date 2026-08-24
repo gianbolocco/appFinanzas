@@ -448,6 +448,7 @@ export async function archiveGoal(goalId: string) {
 export async function contributeToGoal(goalId: string, formData: FormData) {
   const parsed = contributionFormSchema.parse({
     amount: Number(formData.get("amount")),
+    account_id: formData.get("account_id"),
     note: formData.get("note") || undefined,
   });
 
@@ -457,29 +458,62 @@ export async function contributeToGoal(goalId: string, formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("No autenticado");
 
-  // Registrar aporte
+  const { data: goal } = await supabase
+    .from("goals")
+    .select("current_amount, target_amount, currency, name")
+    .eq("id", goalId)
+    .single();
+  if (!goal) throw new Error("Meta no encontrada");
+
+  const { data: profile } = await supabase
+    .from("users")
+    .select("base_currency")
+    .eq("id", user.id)
+    .single();
+  const baseCurrency = profile?.base_currency ?? "ARS";
+  const date = todayLocal();
+  const rate = await fetchRate(supabase, goal.currency, baseCurrency, date);
+
+  // El aporte sale de una cuenta real y deja rastro como transacción.
+  // goal_id la marca como ahorro: no se cuenta como gasto del mes.
+  const { data: tx, error: txErr } = await supabase
+    .from("transactions")
+    .insert({
+      user_id: user.id,
+      type: "expense",
+      amount: parsed.amount,
+      currency: goal.currency,
+      amount_base: parsed.amount * rate,
+      exchange_rate: rate,
+      account_id: parsed.account_id,
+      goal_id: goalId,
+      note: parsed.note ? `Meta ${goal.name}: ${parsed.note}` : `Aporte a meta: ${goal.name}`,
+      date,
+      source: "manual",
+    })
+    .select()
+    .single();
+  if (txErr) throw txErr;
+
   const { error: contribErr } = await supabase.from("goal_contributions").insert({
     goal_id: goalId,
     user_id: user.id,
     amount: parsed.amount,
+    transaction_id: tx.id,
     note: parsed.note,
   });
   if (contribErr) throw contribErr;
 
-  // Actualizar current_amount de la meta
-  const { data: goal } = await supabase.from("goals").select("current_amount").eq("id", goalId).single();
-  if (goal) {
-    const newAmount = goal.current_amount + parsed.amount;
-    await supabase
-      .from("goals")
-      .update({
-        current_amount: newAmount,
-        archived: newAmount >= (await supabase.from("goals").select("target_amount").eq("id", goalId).single()).data?.target_amount,
-      })
-      .eq("id", goalId);
-  }
+  await applyBalance(supabase, parsed.account_id, -parsed.amount);
+
+  // Completar una meta no la archiva: archivar es una decisión del usuario.
+  await supabase
+    .from("goals")
+    .update({ current_amount: goal.current_amount + parsed.amount })
+    .eq("id", goalId);
 
   revalidatePath("/dashboard/metas");
+  revalidatePath("/dashboard");
 }
 
 // ----------------------------------------------------------------------------

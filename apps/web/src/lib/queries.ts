@@ -308,8 +308,9 @@ export async function getCategoryBreakdown(opts?: { from?: string; to?: string }
   let q = supabase
     .from("transactions")
     .select("amount, amount_base, currency, category:categories(id, name, color, icon)")
+    .eq("type", "expense")
     .eq("is_installment_parent", false)
-    .eq("type", "expense");
+    .is("goal_id", null);
 
   if (opts?.from) q = q.gte("date", opts.from);
   if (opts?.to) q = q.lte("date", opts.to);
@@ -476,18 +477,21 @@ export async function getMonthlySummary() {
 
   const { data, error } = await supabase
     .from("transactions")
-    .select("type, amount, amount_base")
+    .select("type, amount, amount_base, goal_id")
     .in("type", ["income", "expense"])
     .eq("is_installment_parent", false)
     .gte("date", from);
 
   if (error) throw error;
 
-  const summary = { income: 0, expense: 0, incomeBase: 0, expenseBase: 0 };
+  const summary = { income: 0, expense: 0, savings: 0, incomeBase: 0, expenseBase: 0 };
   for (const t of data ?? []) {
     if (t.type === "income") {
       summary.income += t.amount;
       summary.incomeBase += t.amount_base;
+    } else if (t.goal_id) {
+      // Aporte a una meta: salió de la cuenta, pero no se consumió.
+      summary.savings += t.amount;
     } else {
       summary.expense += t.amount;
       summary.expenseBase += t.amount_base;

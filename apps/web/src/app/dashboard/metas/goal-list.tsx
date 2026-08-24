@@ -21,7 +21,17 @@ type Goal = {
   isCompleted: boolean;
 };
 
-export function GoalList({ goals, baseCurrency }: { goals: Goal[]; baseCurrency: string }) {
+type Account = { id: string; name: string; currency: string };
+
+export function GoalList({
+  goals,
+  accounts,
+  baseCurrency,
+}: {
+  goals: Goal[];
+  accounts: Account[];
+  baseCurrency: string;
+}) {
   const [showForm, setShowForm] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -145,33 +155,50 @@ export function GoalList({ goals, baseCurrency }: { goals: Goal[]; baseCurrency:
             </div>
 
             {/* Aporte rápido */}
-            {!g.archived && !g.isCompleted && (
+            {!g.archived && (
               <form
                 onSubmit={(e) => handleContribute(g.id, e)}
-                className="flex gap-2"
+                className="flex flex-col gap-2"
               >
-                <input
-                  name="amount"
-                  type="number"
-                  step="0.01"
-                  inputMode="decimal"
+                <select
+                  name="account_id"
                   required
-                  placeholder="Monto del aporte"
-                  className="h-10 flex-1 rounded-xl border border-input bg-background px-3 font-mono text-sm tabular-nums outline-none focus:border-primary"
-                />
-                <button
-                  type="submit"
-                  disabled={pending}
-                  className="h-10 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50"
+                  defaultValue={accounts[0]?.id ?? ""}
+                  aria-label="Cuenta de la que sale el aporte"
+                  className="h-10 rounded-xl border border-input bg-background px-3 text-sm outline-none focus:border-primary"
                 >
-                  {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Aportar"}
-                </button>
+                  <option value="">¿De qué cuenta sale?</option>
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} · {a.currency}
+                    </option>
+                  ))}
+                </select>
+                <div className="flex gap-2">
+                  <input
+                    name="amount"
+                    type="number"
+                    step="0.01"
+                    inputMode="decimal"
+                    required
+                    placeholder="Monto del aporte"
+                    aria-label="Monto del aporte"
+                    className="h-10 flex-1 rounded-xl border border-input bg-background px-3 font-mono text-sm tabular-nums outline-none focus:border-primary"
+                  />
+                  <button
+                    type="submit"
+                    disabled={pending || accounts.length === 0}
+                    className="h-10 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50"
+                  >
+                    {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Aportar"}
+                  </button>
+                </div>
               </form>
             )}
 
-            {g.isCompleted && (
+            {g.isCompleted && !g.archived && (
               <p className="rounded-lg bg-primary/10 px-3 py-2 text-center text-sm font-medium text-primary">
-                ¡Meta completada! 🎉
+                ¡Meta completada! 🎉 Archivala cuando quieras.
               </p>
             )}
 

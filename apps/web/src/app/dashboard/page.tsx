@@ -175,6 +175,11 @@ export default async function DashboardPage() {
             <p className="mt-1.5 font-mono text-lg font-semibold tabular-nums">
               {formatMoney(summary.income - summary.expense, baseCurrency)}
             </p>
+            {summary.savings > 0 && (
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {formatMoney(summary.savings, baseCurrency)} a metas
+              </p>
+            )}
           </div>
           <div className="hidden rounded-2xl border border-border bg-card p-4 shadow-sm lg:block">
             <p className="text-xs text-muted-foreground">Cuentas</p>
