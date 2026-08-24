@@ -255,6 +255,18 @@ export async function getSubscriptionsMonthlyTotal() {
   return subs.filter((s) => s.active).reduce((sum, s) => sum + s.monthlyEquivalent, 0);
 }
 
+// Historial de pagos de una suscripción
+export async function getSubscriptionPayments(subscriptionId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("id, amount, currency, date, note, account:accounts!transactions_account_id_fkey(name)")
+    .eq("subscription_id", subscriptionId)
+    .order("date", { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
 // ----------------------------------------------------------------------------
 // Reportes
 // ----------------------------------------------------------------------------

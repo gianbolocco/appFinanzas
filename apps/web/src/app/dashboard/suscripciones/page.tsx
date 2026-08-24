@@ -1,6 +1,5 @@
-import { getSubscriptions, getSubscriptionsMonthlyTotal } from "@/lib/queries";
+import { getSubscriptions, getSubscriptionsMonthlyTotal, getSubscriptionPayments, getCategories, getAccounts } from "@/lib/queries";
 import { getCurrentUser } from "@/lib/dal";
-import { getCategories, getAccounts } from "@/lib/queries";
 import { formatMoney } from "@/lib/format";
 import { SubscriptionList } from "./subscription-list";
 
@@ -12,6 +11,18 @@ export default async function SuscripcionesPage() {
     getCategories(),
     getAccounts(),
   ]);
+
+  // Traer historial de pagos para cada suscripción
+  const paymentsBySubscription: Record<string, Awaited<ReturnType<typeof getSubscriptionPayments>>> = {};
+  await Promise.all(
+    subscriptions.map(async (s) => {
+      try {
+        paymentsBySubscription[s.id] = await getSubscriptionPayments(s.id);
+      } catch {
+        paymentsBySubscription[s.id] = [];
+      }
+    }),
+  );
 
   const active = subscriptions.filter((s) => s.active);
 
@@ -37,17 +48,10 @@ export default async function SuscripcionesPage() {
 
       <SubscriptionList
         subscriptions={subscriptions}
-        categories={categories.map((c) => ({
-          id: c.id,
-          name: c.name,
-          kind: c.kind,
-        }))}
-        accounts={accounts.map((a) => ({
-          id: a.id,
-          name: a.name,
-          currency: a.currency,
-        }))}
+        categories={categories.map((c) => ({ id: c.id, name: c.name, kind: c.kind }))}
+        accounts={accounts.map((a) => ({ id: a.id, name: a.name, currency: a.currency }))}
         baseCurrency={profile.base_currency}
+        paymentsBySubscription={paymentsBySubscription as unknown as Record<string, { id: string; amount: number; currency: string; date: string; note: string | null; account: { name: string } | null }[]>}
       />
     </div>
   );

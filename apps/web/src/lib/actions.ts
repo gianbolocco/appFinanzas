@@ -627,6 +627,23 @@ export async function deleteSubscription(subscriptionId: string) {
   revalidatePath("/dashboard/suscripciones");
 }
 
+export async function updateSubscription(subscriptionId: string, formData: FormData) {
+  const parsed = subscriptionFormSchema.parse({
+    name: formData.get("name"),
+    amount: Number(formData.get("amount")),
+    currency: formData.get("currency") ?? "ARS",
+    cadence: formData.get("cadence") ?? "monthly",
+    next_date: formData.get("next_date"),
+    category_id: formData.get("category_id") || null,
+    account_id: formData.get("account_id") || null,
+  });
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("subscriptions").update(parsed).eq("id", subscriptionId);
+  if (error) throw error;
+  revalidatePath("/dashboard/suscripciones");
+}
+
 export async function toggleSubscription(subscriptionId: string, currentActive: boolean) {
   const supabase = await createClient();
   const { error } = await supabase
@@ -669,6 +686,7 @@ export async function registerSubscriptionPayment(subscriptionId: string) {
     note: `Suscripción: ${sub.name}`,
     date: new Date().toISOString().slice(0, 10),
     source: "manual",
+    subscription_id: subscriptionId,
   });
   if (txErr) throw txErr;
 
