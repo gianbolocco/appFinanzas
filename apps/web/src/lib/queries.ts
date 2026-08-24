@@ -254,6 +254,131 @@ export async function getSubscriptionsMonthlyTotal() {
   const subs = await getSubscriptions();
   return subs.filter((s) => s.active).reduce((sum, s) => sum + s.monthlyEquivalent, 0);
 }
+
+// ----------------------------------------------------------------------------
+// Reportes
+// ----------------------------------------------------------------------------
+
+// Desglose por categoría (gastos del período)
+export async function getCategoryBreakdown(opts?: { from?: string; to?: string }) {
+  const supabase = await createClient();
+  let q = supabase
+    .from("transactions")
+    .select("amount, amount_base, currency, category:categories(id, name, color, icon)")
+    .eq("type", "expense");
+
+  if (opts?.from) q = q.gte("date", opts.from);
+  if (opts?.to) q = q.lte("date", opts.to);
+
+  const { data, error } = await q;
+  if (error) throw error;
+
+  const byCategory: Record<string, { name: string; color: string; icon: string | null; total: number }> = {};
+  for (const t of data ?? []) {
+    const cat = t.category as unknown as { id: string; name: string; color: string; icon: string | null } | null;
+    if (!cat) continue;
+    if (!byCategory[cat.id]) {
+      byCategory[cat.id] = { name: cat.name, color: cat.color, icon: cat.icon, total: 0 };
+    }
+    byCategory[cat.id].total += t.amount;
+  }
+
+  return Object.values(byCategory).sort((a, b) => b.total - a.total);
+}
+
+// Tendencias temporales (últimos 6 meses: ingresos vs gastos)
+export async function getMonthlyTrends() {
+  const supabase = await createClient();
+  const now = new Date();
+  const months: { label: string; from: string; to: string }[] = [];
+
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const next = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
+    months.push({
+      label: d.toLocaleDateString("es-AR", { month: "short" }),
+      from: d.toISOString().slice(0, 10),
+      to: next.toISOString().slice(0, 10),
+    });
+  }
+
+  const results = await Promise.all(
+    months.map(async (m) => {
+      const { data } = await supabase
+        .from("transactions")
+        .select("type, amount")
+        .gte("date", m.from)
+        .lte("date", m.to);
+      let income = 0;
+      let expense = 0;
+      for (const t of data ?? []) {
+        if (t.type === "income") income += t.amount;
+        else if (t.type === "expense") expense += t.amount;
+      }
+      return { month: m.label, ingresos: income, gastos: expense, ahorro: income - expense };
+    }),
+  );
+
+  return results;
+}
+
+// Comparativa mes actual vs mes anterior
+export async function getMonthComparison() {
+  const supabase = await createClient();
+  const now = new Date();
+
+  const thisFrom = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+  const prevFrom = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 10);
+  const prevTo = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().slice(0, 10);
+
+  const [currRes, prevRes] = await Promise.all([
+    supabase.from("transactions").select("type, amount").gte("date", thisFrom),
+    supabase.from("transactions").select("type, amount").gte("date", prevFrom).lte("date", prevTo),
+  ]);
+
+  function sum(data: { type: string; amount: number }[]) {
+    let income = 0;
+    let expense = 0;
+    for (const t of data ?? []) {
+      if (t.type === "income") income += t.amount;
+      else if (t.type === "expense") expense += t.amount;
+    }
+    return { income, expense, ahorro: income - expense };
+  }
+
+  return {
+    current: sum(currRes.data ?? []),
+    previous: sum(prevRes.data ?? []),
+  };
+}
+
+// Por método de pago (cuenta)
+export async function getBreakdownByAccount(opts?: { from?: string; to?: string }) {
+  const supabase = await createClient();
+  let q = supabase
+    .from("transactions")
+    .select("amount, type, account:accounts!transactions_account_id_fkey(id, name, type)")
+    .in("type", ["expense", "income"]);
+
+  if (opts?.from) q = q.gte("date", opts.from);
+  if (opts?.to) q = q.lte("date", opts.to);
+
+  const { data, error } = await q;
+  if (error) throw error;
+
+  const byAccount: Record<string, { name: string; type: string; income: number; expense: number }> = {};
+  for (const t of data ?? []) {
+    const acc = t.account as unknown as { id: string; name: string; type: string } | null;
+    if (!acc) continue;
+    if (!byAccount[acc.id]) {
+      byAccount[acc.id] = { name: acc.name, type: acc.type, income: 0, expense: 0 };
+    }
+    if (t.type === "income") byAccount[acc.id].income += t.amount;
+    else if (t.type === "expense") byAccount[acc.id].expense += t.amount;
+  }
+
+  return Object.values(byAccount).sort((a, b) => b.expense + b.income - (a.expense + a.income));
+}
 export async function getTransactions(opts?: {
   limit?: number;
   type?: string;
