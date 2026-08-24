@@ -129,3 +129,13 @@ export const subscriptionFormSchema = z.object({
 });
 
 export type SubscriptionForm = z.infer<typeof subscriptionFormSchema>;
+
+// ----------------------------------------------------------------------------
+// Perfil
+// ----------------------------------------------------------------------------
+export const profileFormSchema = z.object({
+  full_name: z.string().min(1, "Poné tu nombre").max(80),
+  base_currency: z.string().min(3).max(3),
+});
+
+export type ProfileForm = z.infer<typeof profileFormSchema>;

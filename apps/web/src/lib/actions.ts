@@ -11,6 +11,7 @@ import {
   goalFormSchema,
   contributionFormSchema,
   subscriptionFormSchema,
+  profileFormSchema,
 } from "@/lib/schemas";
 import { todayLocal, addCadenceIso } from "@/lib/dates";
 import { splitInstallments, installmentDates, dueThrough } from "@/lib/money";
@@ -639,6 +640,28 @@ export async function registerSubscriptionPayment(subscriptionId: string) {
 
   revalidatePath("/dashboard/suscripciones");
   revalidatePath("/dashboard");
+}
+
+// ----------------------------------------------------------------------------
+// Perfil
+// ----------------------------------------------------------------------------
+export async function updateProfile(formData: FormData) {
+  const parsed = profileFormSchema.parse({
+    full_name: formData.get("full_name"),
+    base_currency: formData.get("base_currency"),
+  });
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  const { error } = await supabase.from("users").update(parsed).eq("id", user.id);
+  if (error) throw error;
+
+  // La moneda base afecta todos los totales, no solo Ajustes.
+  revalidatePath("/dashboard", "layout");
 }
 
 // ----------------------------------------------------------------------------

@@ -7,9 +7,12 @@ export function ThemeInit() {
     try {
       const pref = localStorage.getItem("guita-theme");
       const dark =
-        pref === "dark" || (!pref && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        pref === "dark" ||
+        (pref !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
       document.documentElement.classList.toggle("dark", dark);
-    } catch {}
+    } catch {
+      // Sin localStorage se queda en tema claro; no vale romper el render por esto.
+    }
   }, []);
 
   return null;
