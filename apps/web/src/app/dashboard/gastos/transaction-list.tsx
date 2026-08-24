@@ -20,6 +20,7 @@ type Tx = {
   parent_transaction_id: string | null;
   category: { name: string; color: string; icon: string | null } | null;
   account: { name: string } | null;
+  to_account: { name: string } | null;
   installment_number: number | null;
   installments_total: number | null;
 };
@@ -199,6 +200,7 @@ export function TransactionList({
                   </p>
                   <p className="truncate text-xs text-muted-foreground">
                     {formatShortDate(t.date)} · {t.account?.name} · {TYPE_LABELS[t.type]}
+                    {t.type === "transfer" && t.to_account && ` → ${t.to_account.name}`}
                   </p>
                 </div>
                 <p
