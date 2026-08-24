@@ -95,6 +95,8 @@ export function TransactionSheet({
         </header>
 
         <form onSubmit={handleSubmit} className="flex flex-1 flex-col gap-4 overflow-y-auto p-5">
+          <input type="hidden" name="type" value={type} />
+
           {/* Tipo */}
           <div className="flex gap-1 rounded-xl bg-muted p-1">
             {TYPE_TABS.map((t) => (
