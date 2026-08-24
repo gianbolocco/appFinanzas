@@ -223,11 +223,17 @@ export function SubscriptionList({
           {s.active && (
             <button
               onClick={() => handlePayment(s.id)}
-              disabled={pending}
+              disabled={pending || !s.account_id}
+              title={!s.account_id ? "Asignale una cuenta primero" : undefined}
               className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50"
             >
               <CheckCircle2 className="h-3.5 w-3.5" /> Registrar pago
             </button>
+          )}
+          {s.active && !s.account_id && (
+            <span className="self-center text-xs text-muted-foreground">
+              Sin cuenta asignada
+            </span>
           )}
           <button
             onClick={() => handleToggle(s.id, s.active)}

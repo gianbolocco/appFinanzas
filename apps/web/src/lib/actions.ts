@@ -12,7 +12,7 @@ import {
   contributionFormSchema,
   subscriptionFormSchema,
 } from "@/lib/schemas";
-import { todayLocal } from "@/lib/dates";
+import { todayLocal, addCadenceIso } from "@/lib/dates";
 import { splitInstallments, installmentDates, dueThrough } from "@/lib/money";
 
 // ----------------------------------------------------------------------------
@@ -584,7 +584,6 @@ export async function registerSubscriptionPayment(subscriptionId: string) {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("No autenticado");
 
-  // Buscar la suscripción
   const { data: sub, error: subErr } = await supabase
     .from("subscriptions")
     .select("*")
@@ -592,10 +591,21 @@ export async function registerSubscriptionPayment(subscriptionId: string) {
     .single();
   if (subErr || !sub) throw new Error("Suscripción no encontrada");
 
-  // Crear gasto
-  const { data: profile } = await supabase.from("users").select("base_currency").eq("id", user.id).single();
+  if (!sub.account_id) {
+    throw new Error("Asignale una cuenta a la suscripción antes de registrar el pago");
+  }
+
+  const { data: profile } = await supabase
+    .from("users")
+    .select("base_currency")
+    .eq("id", user.id)
+    .single();
   const baseCurrency = profile?.base_currency ?? "ARS";
-  const rate = sub.currency === baseCurrency ? 1 : await fetchRate(supabase, sub.currency, baseCurrency, sub.next_date);
+
+  // El pago se fecha el día que vencía, no hoy: si registrás con atraso,
+  // el gasto cae en el mes que corresponde.
+  const paymentDate = sub.next_date;
+  const rate = await fetchRate(supabase, sub.currency, baseCurrency, paymentDate);
 
   const { error: txErr } = await supabase.from("transactions").insert({
     user_id: user.id,
@@ -607,32 +617,24 @@ export async function registerSubscriptionPayment(subscriptionId: string) {
     category_id: sub.category_id,
     account_id: sub.account_id,
     note: `Suscripción: ${sub.name}`,
-    date: new Date().toISOString().slice(0, 10),
+    date: paymentDate,
     source: "manual",
     subscription_id: subscriptionId,
   });
-  if (txErr) throw txErr;
 
-  // Ajustar saldo de la cuenta
-  if (sub.account_id) {
-    const { data: acc } = await supabase.from("accounts").select("balance").eq("id", sub.account_id).single();
-    if (acc) {
-      await supabase.from("accounts").update({ balance: acc.balance - sub.amount }).eq("id", sub.account_id);
+  if (txErr) {
+    // uq_subscription_payment_per_day: la base rechaza el pago duplicado.
+    if (txErr.code === "23505") {
+      throw new Error("Ese pago ya estaba registrado");
     }
+    throw txErr;
   }
 
-  // Avanzar next_date según cadencia
-  const nextDate = new Date(sub.next_date + "T00:00:00");
-  switch (sub.cadence) {
-    case "weekly": nextDate.setDate(nextDate.getDate() + 7); break;
-    case "monthly": nextDate.setMonth(nextDate.getMonth() + 1); break;
-    case "quarterly": nextDate.setMonth(nextDate.getMonth() + 3); break;
-    case "yearly": nextDate.setFullYear(nextDate.getFullYear() + 1); break;
-  }
+  await applyBalance(supabase, sub.account_id, -sub.amount);
 
   await supabase
     .from("subscriptions")
-    .update({ next_date: nextDate.toISOString().slice(0, 10) })
+    .update({ next_date: addCadenceIso(sub.next_date, sub.cadence) })
     .eq("id", subscriptionId);
 
   revalidatePath("/dashboard/suscripciones");
