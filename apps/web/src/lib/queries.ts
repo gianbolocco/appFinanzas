@@ -2,6 +2,7 @@ import "server-only";
 
 import { createClient } from "@/lib/supabase-server";
 import { getCurrentUser } from "@/lib/dal";
+import { monthStartLocal } from "@/lib/dates";
 
 // ----------------------------------------------------------------------------
 // Cuentas
@@ -49,38 +50,38 @@ export async function getAccountById(accountId: string) {
 
 export async function getAccountMonthlyStats(accountId: string) {
   const supabase = await createClient();
-  const now = new Date();
-  const from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+  const from = monthStartLocal();
 
-  const { data, error } = await supabase
+  // Movimientos donde esta cuenta es el origen
+  const { data: outgoing, error } = await supabase
     .from("transactions")
-    .select("type, amount, currency, account_id, to_account_id")
+    .select("type, amount")
     .eq("account_id", accountId)
+    .eq("is_installment_parent", false)
     .gte("date", from);
 
   if (error) throw error;
 
   let income = 0;
   let expense = 0;
-  let transferIn = 0;
   let transferOut = 0;
 
-  for (const t of data ?? []) {
+  for (const t of outgoing ?? []) {
     if (t.type === "income") income += t.amount;
     else if (t.type === "expense") expense += t.amount;
     else if (t.type === "transfer") transferOut += t.amount;
   }
 
-  // Transferencias entrantes (donde esta cuenta es el destino)
+  // Transferencias entrantes: dest_amount ya está en la moneda de esta cuenta.
+  // No se multiplica por exchange_rate (ese rate convierte a moneda base).
   const { data: incoming } = await supabase
     .from("transactions")
-    .select("amount, currency, exchange_rate")
+    .select("amount, dest_amount")
     .eq("to_account_id", accountId)
+    .eq("type", "transfer")
     .gte("date", from);
 
-  for (const t of incoming ?? []) {
-    transferIn += t.amount * (t.exchange_rate ?? 1);
-  }
+  const transferIn = (incoming ?? []).reduce((s, t) => s + (t.dest_amount ?? t.amount), 0);
 
   return { income, expense, transferIn, transferOut };
 }
@@ -94,27 +95,28 @@ export async function getAccountBalanceAtDate(accountId: string, date: string) {
     .single();
   if (!account) return 0;
 
-  // Sumar transacciones después de esa fecha para restarlas del saldo actual
-  const { data: txs } = await supabase
+  // Deshacer los movimientos posteriores a `date` para retroceder el saldo.
+  const { data: outgoing } = await supabase
     .from("transactions")
-    .select("type, amount, exchange_rate")
+    .select("type, amount")
     .eq("account_id", accountId)
+    .eq("is_installment_parent", false)
     .gt("date", date);
 
   const { data: incoming } = await supabase
     .from("transactions")
-    .select("amount, exchange_rate")
+    .select("amount, dest_amount")
     .eq("to_account_id", accountId)
+    .eq("type", "transfer")
     .gt("date", date);
 
   let delta = 0;
-  for (const t of txs ?? []) {
+  for (const t of outgoing ?? []) {
     if (t.type === "income") delta -= t.amount;
-    else if (t.type === "expense") delta += t.amount;
-    else if (t.type === "transfer") delta += t.amount;
+    else delta += t.amount; // expense y transfer salieron de esta cuenta
   }
   for (const t of incoming ?? []) {
-    delta -= t.amount * (t.exchange_rate ?? 1);
+    delta -= t.dest_amount ?? t.amount;
   }
 
   return account.balance + delta;
@@ -424,13 +426,14 @@ export async function getTransactions(opts?: {
 
 export async function getMonthlySummary() {
   const { profile } = await getCurrentUser();
-  const now = new Date();
-  const from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+  const from = monthStartLocal();
   const supabase = await createClient();
 
   const { data, error } = await supabase
     .from("transactions")
     .select("type, amount, amount_base")
+    .in("type", ["income", "expense"])
+    .eq("is_installment_parent", false)
     .gte("date", from);
 
   if (error) throw error;
@@ -440,7 +443,7 @@ export async function getMonthlySummary() {
     if (t.type === "income") {
       summary.income += t.amount;
       summary.incomeBase += t.amount_base;
-    } else if (t.type === "expense") {
+    } else {
       summary.expense += t.amount;
       summary.expenseBase += t.amount_base;
     }

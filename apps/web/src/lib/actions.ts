@@ -189,56 +189,26 @@ export async function createTransaction(formData: FormData) {
     const { error: childErr } = await supabase.from("transactions").insert(children);
     if (childErr) throw childErr;
   } else if (parsed.type === "transfer" && parsed.to_account_id) {
-    // Transferencia: crear DOS transacciones (gasto en origen + ingreso en destino)
+    // Una transferencia es UNA fila: origen en account_id, destino en to_account_id.
+    // amount queda en la moneda del origen; dest_amount en la del destino.
     const destRate = Number(formData.get("dest_rate") ?? "1") || 1;
-    const destAmount = parsed.amount * destRate;
+    const destAmount = Math.round(parsed.amount * destRate * 100) / 100;
 
-    // Buscar info de las cuentas
-    const { data: toAcc } = await supabase
-      .from("accounts")
-      .select("name, currency")
-      .eq("id", parsed.to_account_id)
-      .single();
-    const { data: fromAcc } = await supabase
-      .from("accounts")
-      .select("name, currency")
-      .eq("id", parsed.account_id)
-      .single();
-
-    const destCurrency = toAcc?.currency ?? parsed.currency;
-    const destBase = destAmount * (destCurrency === baseCurrency ? 1 : rate);
-
-    // Gasto en la cuenta origen
-    const { error: outErr } = await supabase.from("transactions").insert({
+    const { error } = await supabase.from("transactions").insert({
       user_id: user.id,
-      type: "expense",
+      type: "transfer",
       amount: parsed.amount,
       currency: parsed.currency,
+      dest_amount: destAmount,
       amount_base: amountBase,
       exchange_rate: rate,
       account_id: parsed.account_id,
       to_account_id: parsed.to_account_id,
-      note: parsed.note ? `Transfer → ${toAcc?.name ?? ""}: ${parsed.note}` : `Transfer → ${toAcc?.name ?? ""}`,
+      note: parsed.note,
       date: parsed.date,
       source: "manual",
     });
-    if (outErr) throw outErr;
-
-    // Ingreso en la cuenta destino
-    const { error: inErr } = await supabase.from("transactions").insert({
-      user_id: user.id,
-      type: "income",
-      amount: destAmount,
-      currency: destCurrency,
-      amount_base: destBase,
-      exchange_rate: destRate,
-      account_id: parsed.to_account_id,
-      to_account_id: parsed.account_id,
-      note: parsed.note ? `Transfer ← ${fromAcc?.name ?? ""}: ${parsed.note}` : `Transfer ← ${fromAcc?.name ?? ""}`,
-      date: parsed.date,
-      source: "manual",
-    });
-    if (inErr) throw inErr;
+    if (error) throw error;
   } else {
     // Gasto o ingreso simple
     const { error } = await supabase.from("transactions").insert({
@@ -257,51 +227,17 @@ export async function createTransaction(formData: FormData) {
     if (error) throw error;
   }
 
-  // Ajustar saldos: ahora las transferencias son expense (origen) + income (destino),
-  // así que se ajustan solas con la lógica de gasto/ingreso.
-  if (parsed.type !== "transfer") {
-    const sign = parsed.type === "income" ? 1 : -1;
-    const delta = installments ? sign * (parsed.amount / installmentsCount) : sign * parsed.amount;
-    const { data: acc } = await supabase
-      .from("accounts")
-      .select("balance")
-      .eq("id", parsed.account_id)
-      .single();
-    if (acc) {
-      await supabase
-        .from("accounts")
-        .update({ balance: acc.balance + delta })
-        .eq("id", parsed.account_id);
-    }
-  } else if (parsed.to_account_id) {
-    // Transferencia: restar del origen (gasto) y sumar al destino (ingreso)
+  // Ajustar saldos
+  if (parsed.type === "transfer" && parsed.to_account_id) {
     const destRate = Number(formData.get("dest_rate") ?? "1") || 1;
-    const destAmount = parsed.amount * destRate;
-
-    const { data: origAcc } = await supabase
-      .from("accounts")
-      .select("balance")
-      .eq("id", parsed.account_id)
-      .single();
-    if (origAcc) {
-      await supabase
-        .from("accounts")
-        .update({ balance: origAcc.balance - parsed.amount })
-        .eq("id", parsed.account_id);
-    }
-
-    const { data: destAcc } = await supabase
-      .from("accounts")
-      .select("balance")
-      .eq("id", parsed.to_account_id)
-      .single();
-    if (destAcc) {
-      await supabase
-        .from("accounts")
-        .update({ balance: destAcc.balance + destAmount })
-        .eq("id", parsed.to_account_id);
-    }
+    const destAmount = Math.round(parsed.amount * destRate * 100) / 100;
+    await applyBalance(supabase, parsed.account_id, -parsed.amount);
+    await applyBalance(supabase, parsed.to_account_id, destAmount);
+  } else if (!installments) {
+    const sign = parsed.type === "income" ? 1 : -1;
+    await applyBalance(supabase, parsed.account_id, sign * parsed.amount);
   }
+  // El caso `installments` ajusta su propio saldo en la Task 4.
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/gastos");
@@ -324,39 +260,17 @@ export async function deleteTransaction(transactionId: string) {
   if (!tx) return;
   if (tx.parent_transaction_id) throw new Error("No se pueden borrar cuotas individuales");
 
-  // Si es parte de una transferencia (tiene to_account_id), buscar y borrar la contrapartida
-  const pairedIds: string[] = [transactionId];
-  if (tx.to_account_id) {
-    const { data: paired } = await supabase
-      .from("transactions")
-      .select("id, type, amount, account_id, exchange_rate")
-      .eq("to_account_id", tx.account_id)
-      .eq("account_id", tx.to_account_id)
-      .eq("date", tx.date)
-      .neq("id", transactionId);
-    for (const p of paired ?? []) {
-      pairedIds.push(p.id);
-      // Revertir saldo de la contrapartida
-      const sign = p.type === "income" ? -1 : 1;
-      const { data: acc } = await supabase.from("accounts").select("balance").eq("id", p.account_id).single();
-      if (acc) {
-        await supabase.from("accounts").update({ balance: acc.balance + sign * p.amount }).eq("id", p.account_id);
-      }
-    }
+  // Revertir saldos. Una transferencia es una sola fila: revierte las dos puntas.
+  if (tx.type === "transfer") {
+    await applyBalance(supabase, tx.account_id, tx.amount);
+    await applyBalance(supabase, tx.to_account_id, -(tx.dest_amount ?? tx.amount));
+  } else {
+    const sign = tx.type === "income" ? -1 : 1;
+    await applyBalance(supabase, tx.account_id, sign * tx.amount);
   }
 
-  // Revertir saldo de la transacción principal
-  const sign = tx.type === "income" ? -1 : 1;
-  const { data: acc } = await supabase.from("accounts").select("balance").eq("id", tx.account_id).single();
-  if (acc) {
-    await supabase.from("accounts").update({ balance: acc.balance + sign * tx.amount }).eq("id", tx.account_id);
-  }
-
-  // Borrar todas (principal + contrapartidas + hijas de cuota por cascade)
-  for (const id of pairedIds) {
-    const { error } = await supabase.from("transactions").delete().eq("id", id);
-    if (error) throw error;
-  }
+  const { error } = await supabase.from("transactions").delete().eq("id", transactionId);
+  if (error) throw error;
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/gastos");
@@ -397,91 +311,45 @@ export async function updateTransaction(transactionId: string, formData: FormDat
   const rate = parsed.currency === baseCurrency ? 1 : await fetchRate(supabase, parsed.currency, baseCurrency);
   const amountBase = parsed.amount * rate;
 
-  // 1. Revertir saldo original + borrar contrapartida si era transferencia
-  const origSign = original.type === "income" ? -1 : 1;
-  const { data: origAcc } = await supabase.from("accounts").select("balance").eq("id", original.account_id).single();
-  if (origAcc) {
-    await supabase.from("accounts").update({ balance: origAcc.balance + origSign * original.amount }).eq("id", original.account_id);
+  // 1. Revertir el efecto de la transacción original sobre los saldos
+  if (original.type === "transfer") {
+    await applyBalance(supabase, original.account_id, original.amount);
+    await applyBalance(supabase, original.to_account_id, -(original.dest_amount ?? original.amount));
+  } else {
+    const origSign = original.type === "income" ? -1 : 1;
+    await applyBalance(supabase, original.account_id, origSign * original.amount);
   }
 
-  if (original.to_account_id) {
-    // Era transferencia: buscar y revertir+borrar la contrapartida
-    const { data: paired } = await supabase
-      .from("transactions")
-      .select("*")
-      .eq("to_account_id", original.account_id)
-      .eq("account_id", original.to_account_id)
-      .eq("date", original.date)
-      .neq("id", transactionId);
-    for (const p of paired ?? []) {
-      const pSign = p.type === "income" ? -1 : 1;
-      const { data: pAcc } = await supabase.from("accounts").select("balance").eq("id", p.account_id).single();
-      if (pAcc) {
-        await supabase.from("accounts").update({ balance: pAcc.balance + pSign * p.amount }).eq("id", p.account_id);
-      }
-      await supabase.from("transactions").delete().eq("id", p.id);
-    }
-  }
+  // 2. Actualizar la fila
+  const destRate = Number(formData.get("dest_rate") ?? "1") || 1;
+  const destAmount = Math.round(parsed.amount * destRate * 100) / 100;
+  const isTransfer = parsed.type === "transfer" && !!parsed.to_account_id;
 
-  // 2. Actualizar la transacción principal
   const { error: updateErr } = await supabase
     .from("transactions")
     .update({
-      type: parsed.type === "transfer" ? "expense" : parsed.type,
+      type: parsed.type,
       amount: parsed.amount,
       currency: parsed.currency,
+      dest_amount: isTransfer ? destAmount : null,
       amount_base: amountBase,
       exchange_rate: rate,
-      category_id: parsed.category_id,
+      category_id: isTransfer ? null : parsed.category_id,
       account_id: parsed.account_id,
-      to_account_id: parsed.type === "transfer" ? parsed.to_account_id : null,
+      to_account_id: isTransfer ? parsed.to_account_id : null,
       note: parsed.note,
       date: parsed.date,
     })
     .eq("id", transactionId);
   if (updateErr) throw updateErr;
 
-  // 3. Si es transferencia, crear la contrapartida (ingreso en destino)
-  if (parsed.type === "transfer" && parsed.to_account_id) {
-    const { data: accounts } = await supabase.from("accounts").select("id, name, currency").eq("id", parsed.to_account_id).single();
-    const destRate = Number(formData.get("dest_rate") ?? "1") || 1;
-    const destAmount = parsed.amount * destRate;
-    const destCurrency = accounts?.currency ?? parsed.currency;
-    const destBase = destAmount * (destCurrency === baseCurrency ? 1 : rate);
-
-    const { data: origAccount } = await supabase.from("accounts").select("name").eq("id", parsed.account_id).single();
-
-    await supabase.from("transactions").insert({
-      user_id: user.id,
-      type: "income",
-      amount: destAmount,
-      currency: destCurrency,
-      amount_base: destBase,
-      exchange_rate: destRate,
-      account_id: parsed.to_account_id,
-      to_account_id: parsed.account_id,
-      note: parsed.note
-        ? `Transfer ← ${origAccount?.name ?? ""}: ${parsed.note}`
-        : `Transfer ← ${origAccount?.name ?? ""}`,
-      date: parsed.date,
-      source: "manual",
-    });
-  }
-
-  // 4. Aplicar nuevos saldos
-  const newSign = parsed.type === "income" ? 1 : -1;
-  const { data: newAcc } = await supabase.from("accounts").select("balance").eq("id", parsed.account_id).single();
-  if (newAcc) {
-    await supabase.from("accounts").update({ balance: newAcc.balance + newSign * parsed.amount }).eq("id", parsed.account_id);
-  }
-
-  if (parsed.type === "transfer" && parsed.to_account_id) {
-    const destRate = Number(formData.get("dest_rate") ?? "1") || 1;
-    const destAmount = parsed.amount * destRate;
-    const { data: destAcc } = await supabase.from("accounts").select("balance").eq("id", parsed.to_account_id).single();
-    if (destAcc) {
-      await supabase.from("accounts").update({ balance: destAcc.balance + destAmount }).eq("id", parsed.to_account_id);
-    }
+  // 3. Aplicar el efecto de la transacción actualizada
+  if (isTransfer) {
+    await applyBalance(supabase, parsed.account_id, -parsed.amount);
+    await applyBalance(supabase, parsed.to_account_id ?? null, destAmount);
+  } else {
+    const newSign = parsed.type === "income" ? 1 : -1;
+    await applyBalance(supabase, parsed.account_id, newSign * parsed.amount);
   }
 
   revalidatePath("/dashboard");
@@ -734,4 +602,27 @@ async function fetchRate(
     .limit(1)
     .single();
   return data?.rate ?? 1;
+}
+
+/**
+ * Ajusta el saldo de una cuenta sumando `delta` (negativo para restar).
+ * ponytail: read-modify-write sin transaccion; con un solo usuario alcanza.
+ * Si algun dia hay escrituras concurrentes, mover a una funcion Postgres.
+ */
+async function applyBalance(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  accountId: string | null,
+  delta: number,
+): Promise<void> {
+  if (!accountId || delta === 0) return;
+  const { data: acc } = await supabase
+    .from("accounts")
+    .select("balance")
+    .eq("id", accountId)
+    .single();
+  if (!acc) return;
+  await supabase
+    .from("accounts")
+    .update({ balance: acc.balance + delta })
+    .eq("id", accountId);
 }
