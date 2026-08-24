@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Search, Filter, X } from "lucide-react";
+import { Search, Filter, X, Pencil } from "lucide-react";
 
 import { formatSigned, formatShortDate } from "@/lib/format";
+import { TransactionSheet } from "@/components/transaction-sheet";
 
 type Tx = {
   id: string;
@@ -12,13 +13,25 @@ type Tx = {
   currency: string;
   note: string | null;
   date: string;
+  category_id: string | null;
+  account_id: string;
+  to_account_id: string | null;
+  parent_transaction_id: string | null;
   category: { name: string; color: string; icon: string | null } | null;
   account: { name: string } | null;
   installment_number: number | null;
   installments_total: number | null;
 };
-type Category = { id: string; name: string; kind: string };
-type Account = { id: string; name: string };
+type Category = {
+  id: string;
+  name: string;
+  kind: string;
+  parent_id: string | null;
+  icon: string | null;
+  color: string;
+  is_predefined: boolean;
+};
+type Account = { id: string; name: string; type: string; currency: string };
 
 const TYPE_LABELS: Record<string, string> = {
   expense: "Gasto",
@@ -31,16 +44,20 @@ export function TransactionList({
   transactions,
   categories,
   accounts,
+  baseCurrency,
 }: {
   transactions: Tx[];
   categories: Category[];
   accounts: Account[];
+  baseCurrency: string;
 }) {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("");
   const [catFilter, setCatFilter] = useState<string>("");
   const [accFilter, setAccFilter] = useState<string>("");
   const [showFilters, setShowFilters] = useState(false);
+  const [editingTx, setEditingTx] = useState<Tx | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   const filtered = useMemo(() => {
     return transactions.filter((t) => {
@@ -63,6 +80,16 @@ export function TransactionList({
     setCatFilter("");
     setAccFilter("");
     setSearch("");
+  }
+
+  function openEdit(tx: Tx) {
+    setEditingTx(tx);
+    setSheetOpen(true);
+  }
+
+  function closeSheet() {
+    setSheetOpen(false);
+    setEditingTx(null);
   }
 
   return (
@@ -150,7 +177,7 @@ export function TransactionList({
             return (
               <div
                 key={t.id}
-                className="flex items-center gap-3 rounded-2xl border border-border bg-card p-3.5 shadow-sm transition hover:shadow-md"
+                className="group flex items-center gap-3 rounded-2xl border border-border bg-card p-3.5 shadow-sm transition hover:shadow-md"
               >
                 <div
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg"
@@ -178,11 +205,27 @@ export function TransactionList({
                 >
                   {formatSigned(signed, t.currency)}
                 </p>
+                <button
+                  onClick={() => openEdit(t)}
+                  className="rounded-lg p-1.5 text-muted-foreground opacity-0 transition hover:bg-accent hover:text-foreground group-hover:opacity-100"
+                  aria-label="Editar"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
               </div>
             );
           })}
         </div>
       )}
+
+      <TransactionSheet
+        open={sheetOpen}
+        onClose={closeSheet}
+        accounts={accounts}
+        categories={categories}
+        baseCurrency={baseCurrency}
+        editingTx={editingTx}
+      />
     </div>
   );
 }

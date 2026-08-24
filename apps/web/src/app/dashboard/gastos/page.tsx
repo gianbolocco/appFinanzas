@@ -1,12 +1,21 @@
 import { getTransactions, getCategories, getAccounts } from "@/lib/queries";
+import { getCurrentUser } from "@/lib/dal";
 import { TransactionList } from "./transaction-list";
 
 export default async function GastosPage() {
+  const { profile } = await getCurrentUser();
   const [transactions, categories, accounts] = await Promise.all([
     getTransactions({ limit: 100 }),
     getCategories(),
     getAccounts(),
   ]);
+
+  const slimAccounts = accounts.map((a) => ({
+    id: a.id,
+    name: a.name,
+    type: a.type,
+    currency: a.currency,
+  }));
 
   return (
     <div className="flex flex-col gap-5">
@@ -18,7 +27,8 @@ export default async function GastosPage() {
       <TransactionList
         transactions={transactions}
         categories={categories}
-        accounts={accounts}
+        accounts={slimAccounts}
+        baseCurrency={profile.base_currency}
       />
     </div>
   );

@@ -2,9 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { X, Loader2 } from "lucide-react";
+import { X, Loader2, Trash2 } from "lucide-react";
 
-import { createTransaction } from "@/lib/actions";
+import { createTransaction, updateTransaction, deleteTransaction } from "@/lib/actions";
 
 type Account = { id: string; name: string; type: string; currency: string };
 type Category = {
@@ -16,6 +16,18 @@ type Category = {
   color: string;
   is_predefined: boolean;
 };
+type EditingTx = {
+  id: string;
+  type: string;
+  amount: number;
+  currency: string;
+  category_id: string | null;
+  account_id: string;
+  to_account_id: string | null;
+  note: string | null;
+  date: string;
+  parent_transaction_id: string | null;
+} | null;
 
 const TYPE_TABS = [
   { value: "expense", label: "Gasto" },
@@ -31,34 +43,63 @@ export function TransactionSheet({
   accounts,
   categories,
   baseCurrency,
+  editingTx,
 }: {
   open: boolean;
   onClose: () => void;
   accounts: Account[];
   categories: Category[];
   baseCurrency: string;
+  editingTx?: EditingTx;
+}) {
+  if (!open) return null;
+
+  return (
+    <TransactionSheetInner
+      key={editingTx?.id ?? "new"}
+      onClose={onClose}
+      accounts={accounts}
+      categories={categories}
+      baseCurrency={baseCurrency}
+      editingTx={editingTx ?? null}
+    />
+  );
+}
+
+function TransactionSheetInner({
+  onClose,
+  accounts,
+  categories,
+  baseCurrency,
+  editingTx,
+}: {
+  onClose: () => void;
+  accounts: Account[];
+  categories: Category[];
+  baseCurrency: string;
+  editingTx: EditingTx;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  const [type, setType] = useState<(typeof TYPE_TABS)[number]["value"]>("expense");
-  const [amount, setAmount] = useState("");
-  const [currency, setCurrency] = useState(baseCurrency);
-  const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
-  const [toAccountId, setToAccountId] = useState("");
-  const [categoryId, setCategoryId] = useState("");
-  const [note, setNote] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const isEditing = !!editingTx;
+  const isInstallmentChild = !!editingTx?.parent_transaction_id;
+
+  const [type, setType] = useState<(typeof TYPE_TABS)[number]["value"]>(
+    (editingTx?.type as (typeof TYPE_TABS)[number]["value"]) ?? "expense",
+  );
+  const [amount, setAmount] = useState(editingTx ? String(editingTx.amount) : "");
+  const [currency, setCurrency] = useState(editingTx?.currency ?? baseCurrency);
+  const [accountId, setAccountId] = useState(editingTx?.account_id ?? accounts[0]?.id ?? "");
+  const [toAccountId, setToAccountId] = useState(editingTx?.to_account_id ?? "");
+  const [categoryId, setCategoryId] = useState(editingTx?.category_id ?? "");
+  const [note, setNote] = useState(editingTx?.note ?? "");
+  const [date, setDate] = useState(editingTx?.date ?? new Date().toISOString().slice(0, 10));
   const [installments, setInstallments] = useState("");
 
-  if (!open) return null;
-
-  const filteredCategories = categories.filter(
-    (c) =>
-      type === "transfer"
-        ? c.kind === "transfer"
-        : c.kind === type,
+  const filteredCategories = categories.filter((c) =>
+    type === "transfer" ? c.kind === "transfer" : c.kind === type,
   );
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -75,7 +116,11 @@ export function TransactionSheet({
     }
     startTransition(async () => {
       try {
-        await createTransaction(fd);
+        if (isEditing && editingTx) {
+          await updateTransaction(editingTx.id, fd);
+        } else {
+          await createTransaction(fd);
+        }
         router.refresh();
         onClose();
       } catch (err) {
@@ -84,11 +129,26 @@ export function TransactionSheet({
     });
   }
 
+  function handleDelete() {
+    if (!editingTx || !confirm("¿Eliminar este movimiento?")) return;
+    startTransition(async () => {
+      try {
+        await deleteTransaction(editingTx.id);
+        router.refresh();
+        onClose();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Error al eliminar");
+      }
+    });
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 lg:items-center">
       <div className="flex max-h-[92vh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-background shadow-xl lg:rounded-3xl">
         <header className="flex items-center justify-between border-b border-border px-5 py-4">
-          <h2 className="text-base font-semibold">Nuevo movimiento</h2>
+          <h2 className="text-base font-semibold">
+            {isEditing ? "Editar movimiento" : "Nuevo movimiento"}
+          </h2>
           <button onClick={onClose} className="rounded-lg p-1 text-muted-foreground hover:bg-accent">
             <X className="h-5 w-5" />
           </button>
@@ -219,8 +279,8 @@ export function TransactionSheet({
             />
           </div>
 
-          {/* Cuotas (solo gastos) */}
-          {type === "expense" && (
+          {/* Cuotas (solo gastos nuevos — no en edición) */}
+          {type === "expense" && !isEditing && (
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium">Cuotas (opcional)</label>
               <input
@@ -243,15 +303,33 @@ export function TransactionSheet({
             </div>
           )}
 
+          {isInstallmentChild && (
+            <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+              Esta es una cuota de una compra en cuotas. Editá la transacción padre para modificarla.
+            </p>
+          )}
+
           {error && <p className="text-sm text-destructive">{error}</p>}
 
-          <button
-            type="submit"
-            disabled={pending || accounts.length === 0}
-            className="mt-2 flex h-12 items-center justify-center gap-2 rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground transition hover:opacity-90 active:scale-[0.98] disabled:opacity-50"
-          >
-            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Guardar"}
-          </button>
+          <div className="mt-2 flex gap-2">
+            {isEditing && (
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={pending}
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-border bg-card text-destructive transition hover:bg-destructive/5 active:scale-[0.98] disabled:opacity-50"
+              >
+                <Trash2 className="h-5 w-5" />
+              </button>
+            )}
+            <button
+              type="submit"
+              disabled={pending || accounts.length === 0}
+              className="flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground transition hover:opacity-90 active:scale-[0.98] disabled:opacity-50"
+            >
+              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : isEditing ? "Guardar cambios" : "Guardar"}
+            </button>
+          </div>
         </form>
       </div>
     </div>
