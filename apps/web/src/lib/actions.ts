@@ -203,18 +203,18 @@ export async function createTransaction(formData: FormData) {
   // Actualizar saldo de cuenta (excepto transferencias que se compensan)
   if (parsed.type !== "transfer") {
     const sign = parsed.type === "income" ? 1 : -1;
-    if (installments) {
-      // Solo imputar la primera cuota al saldo
-      const firstInstallment = parsed.amount / installmentsCount;
-      await supabase.rpc("adjust_account_balance", {
-        p_account_id: parsed.account_id,
-        p_delta: sign * firstInstallment,
-      }).then(() => {}, () => {});
-    } else {
-      await supabase.rpc("adjust_account_balance", {
-        p_account_id: parsed.account_id,
-        p_delta: sign * parsed.amount,
-      }).then(() => {}, () => {});
+    const delta = installments ? sign * (parsed.amount / installmentsCount) : sign * parsed.amount;
+    // Leer saldo actual y actualizar (RLS permite porque el usuario es dueño)
+    const { data: acc } = await supabase
+      .from("accounts")
+      .select("balance")
+      .eq("id", parsed.account_id)
+      .single();
+    if (acc) {
+      await supabase
+        .from("accounts")
+        .update({ balance: acc.balance + delta })
+        .eq("id", parsed.account_id);
     }
   }
 
