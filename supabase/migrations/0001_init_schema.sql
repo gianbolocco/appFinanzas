@@ -277,12 +277,13 @@ drop trigger if exists trg_accounts_updated on public.accounts;
 create trigger trg_accounts_updated before update on public.accounts
   for each row execute function public.touch_updated_at();
 
-drop trigger if exists trg_transactions_updated on public.transactions;
-create trigger trg_transactions_updated before update on public.transactions
+drop trigger if exists trg_transactions_updated before update on public.transactions
   for each row execute function public.touch_updated_at();
 
 -- ----------------------------------------------------------------------------
 -- AUTO-CREAR PERFIL DE USUARIO AL REGISTRARSE
+-- Nota: sin security definer para evitar error 42P17 en PostgREST.
+-- El trigger de auth.users corre con privilegios suficientes.
 -- ----------------------------------------------------------------------------
 create or replace function public.handle_new_user()
 returns trigger as $$
@@ -297,7 +298,7 @@ begin
   on conflict (id) do nothing;
   return new;
 end;
-$$ language plpgsql security definer set search_path = public;
+$$ language plpgsql;
 
 drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
@@ -341,16 +342,11 @@ create policy "users_update_own" on public.users
 
 -- ----------------------------------------------------------------------------
 -- POLÍTICAS RLS — categories (propias + predefinidas visibles para todos)
+-- IMPORTANTE: sin subqueries a household_members para evitar recursion infinita
 -- ----------------------------------------------------------------------------
 drop policy if exists "categories_select" on public.categories;
 create policy "categories_select" on public.categories
-  for select using (
-    is_predefined = true
-    or user_id = auth.uid()
-    or household_id in (
-      select household_id from public.household_members where user_id = auth.uid()
-    )
-  );
+  for select using (is_predefined = true or user_id = auth.uid());
 
 drop policy if exists "categories_insert_own" on public.categories;
 create policy "categories_insert_own" on public.categories
@@ -365,16 +361,11 @@ create policy "categories_delete_own" on public.categories
   for delete using (user_id = auth.uid());
 
 -- ----------------------------------------------------------------------------
--- POLÍTICAS RLS — accounts
+-- POLÍTICAS RLS — accounts (sin subqueries a household_members)
 -- ----------------------------------------------------------------------------
 drop policy if exists "accounts_select_own" on public.accounts;
 create policy "accounts_select_own" on public.accounts
-  for select using (
-    user_id = auth.uid()
-    or household_id in (
-      select household_id from public.household_members where user_id = auth.uid()
-    )
-  );
+  for select using (user_id = auth.uid());
 
 drop policy if exists "accounts_insert_own" on public.accounts;
 create policy "accounts_insert_own" on public.accounts
@@ -389,16 +380,11 @@ create policy "accounts_delete_own" on public.accounts
   for delete using (user_id = auth.uid());
 
 -- ----------------------------------------------------------------------------
--- POLÍTICAS RLS — transactions
+-- POLÍTICAS RLS — transactions (sin subqueries a household_members)
 -- ----------------------------------------------------------------------------
 drop policy if exists "tx_select_own" on public.transactions;
 create policy "tx_select_own" on public.transactions
-  for select using (
-    user_id = auth.uid()
-    or household_id in (
-      select household_id from public.household_members where user_id = auth.uid()
-    )
-  );
+  for select using (user_id = auth.uid());
 
 drop policy if exists "tx_insert_own" on public.transactions;
 create policy "tx_insert_own" on public.transactions
@@ -458,10 +444,7 @@ drop policy if exists "subs_delete_own" on public.subscriptions;
 create policy "subs_delete_own" on public.subscriptions for delete using (user_id = auth.uid());
 
 drop policy if exists "budgets_select_own" on public.budgets;
-create policy "budgets_select_own" on public.budgets for select using (
-  user_id = auth.uid()
-  or household_id in (select household_id from public.household_members where user_id = auth.uid())
-);
+create policy "budgets_select_own" on public.budgets for select using (user_id = auth.uid());
 
 drop policy if exists "budgets_insert_own" on public.budgets;
 create policy "budgets_insert_own" on public.budgets for insert with check (user_id = auth.uid());
@@ -486,33 +469,35 @@ create policy "goals_delete_own" on public.goals for delete using (user_id = aut
 
 -- ----------------------------------------------------------------------------
 -- POLÍTICAS RLS — households, household_members
+-- IMPORTANTE: sin subqueries recursivas — solo comparación directa por user_id/created_by
 -- ----------------------------------------------------------------------------
 drop policy if exists "households_select_member" on public.households;
-create policy "households_select_member" on public.households for select using (
-  created_by = auth.uid()
-  or id in (select household_id from public.household_members where user_id = auth.uid())
-);
+create policy "households_select_member" on public.households
+  for select using (created_by = auth.uid());
 
 drop policy if exists "households_insert_own" on public.households;
-create policy "households_insert_own" on public.households for insert with check (created_by = auth.uid());
+create policy "households_insert_own" on public.households
+  for insert with check (created_by = auth.uid());
 
 drop policy if exists "households_update_own" on public.households;
-create policy "households_update_own" on public.households for update using (created_by = auth.uid()) with check (created_by = auth.uid());
+create policy "households_update_own" on public.households
+  for update using (created_by = auth.uid()) with check (created_by = auth.uid());
 
 drop policy if exists "households_delete_own" on public.households;
-create policy "households_delete_own" on public.households for delete using (created_by = auth.uid());
+create policy "households_delete_own" on public.households
+  for delete using (created_by = auth.uid());
 
 drop policy if exists "hm_select_member" on public.household_members;
-create policy "hm_select_member" on public.household_members for select using (
-  user_id = auth.uid()
-  or household_id in (select household_id from public.household_members hm where hm.user_id = auth.uid())
-);
+create policy "hm_select_member" on public.household_members
+  for select using (user_id = auth.uid());
 
 drop policy if exists "hm_insert_own" on public.household_members;
-create policy "hm_insert_own" on public.household_members for insert with check (user_id = auth.uid());
+create policy "hm_insert_own" on public.household_members
+  for insert with check (user_id = auth.uid());
 
 drop policy if exists "hm_delete_own" on public.household_members;
-create policy "hm_delete_own" on public.household_members for delete using (user_id = auth.uid());
+create policy "hm_delete_own" on public.household_members
+  for delete using (user_id = auth.uid());
 
 -- ----------------------------------------------------------------------------
 -- POLÍTICAS RLS — exchange_rates (lectura pública, escritura service_role)
