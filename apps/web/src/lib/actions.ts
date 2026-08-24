@@ -3,7 +3,15 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase-server";
-import { accountFormSchema, categoryFormSchema, transactionFormSchema } from "@/lib/schemas";
+import {
+  accountFormSchema,
+  categoryFormSchema,
+  transactionFormSchema,
+  budgetFormSchema,
+  goalFormSchema,
+  contributionFormSchema,
+  subscriptionFormSchema,
+} from "@/lib/schemas";
 
 // ----------------------------------------------------------------------------
 // Cuentas
@@ -479,6 +487,215 @@ export async function updateTransaction(transactionId: string, formData: FormDat
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/gastos");
   revalidatePath(`/dashboard/cuentas/${parsed.account_id}`);
+}
+
+// ----------------------------------------------------------------------------
+// Presupuestos
+// ----------------------------------------------------------------------------
+export async function createBudget(formData: FormData) {
+  const parsed = budgetFormSchema.parse({
+    category_id: formData.get("category_id"),
+    period: formData.get("period") ?? "monthly",
+    amount_limit: Number(formData.get("amount_limit")),
+    currency: formData.get("currency") ?? "ARS",
+  });
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  const { error } = await supabase.from("budgets").insert({ user_id: user.id, ...parsed });
+  if (error) throw error;
+
+  revalidatePath("/dashboard/presupuestos");
+}
+
+export async function deleteBudget(budgetId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("budgets").delete().eq("id", budgetId);
+  if (error) throw error;
+  revalidatePath("/dashboard/presupuestos");
+}
+
+// ----------------------------------------------------------------------------
+// Metas de ahorro
+// ----------------------------------------------------------------------------
+export async function createGoal(formData: FormData) {
+  const parsed = goalFormSchema.parse({
+    name: formData.get("name"),
+    target_amount: Number(formData.get("target_amount")),
+    target_date: formData.get("target_date") || undefined,
+    currency: formData.get("currency") ?? "ARS",
+  });
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  const { error } = await supabase.from("goals").insert({ user_id: user.id, ...parsed });
+  if (error) throw error;
+
+  revalidatePath("/dashboard/metas");
+}
+
+export async function deleteGoal(goalId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("goals").delete().eq("id", goalId);
+  if (error) throw error;
+  revalidatePath("/dashboard/metas");
+}
+
+export async function archiveGoal(goalId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("goals").update({ archived: true }).eq("id", goalId);
+  if (error) throw error;
+  revalidatePath("/dashboard/metas");
+}
+
+export async function contributeToGoal(goalId: string, formData: FormData) {
+  const parsed = contributionFormSchema.parse({
+    amount: Number(formData.get("amount")),
+    note: formData.get("note") || undefined,
+  });
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  // Registrar aporte
+  const { error: contribErr } = await supabase.from("goal_contributions").insert({
+    goal_id: goalId,
+    user_id: user.id,
+    amount: parsed.amount,
+    note: parsed.note,
+  });
+  if (contribErr) throw contribErr;
+
+  // Actualizar current_amount de la meta
+  const { data: goal } = await supabase.from("goals").select("current_amount").eq("id", goalId).single();
+  if (goal) {
+    const newAmount = goal.current_amount + parsed.amount;
+    await supabase
+      .from("goals")
+      .update({
+        current_amount: newAmount,
+        archived: newAmount >= (await supabase.from("goals").select("target_amount").eq("id", goalId).single()).data?.target_amount,
+      })
+      .eq("id", goalId);
+  }
+
+  revalidatePath("/dashboard/metas");
+}
+
+// ----------------------------------------------------------------------------
+// Suscripciones
+// ----------------------------------------------------------------------------
+export async function createSubscription(formData: FormData) {
+  const parsed = subscriptionFormSchema.parse({
+    name: formData.get("name"),
+    amount: Number(formData.get("amount")),
+    currency: formData.get("currency") ?? "ARS",
+    cadence: formData.get("cadence") ?? "monthly",
+    next_date: formData.get("next_date"),
+    category_id: formData.get("category_id") || null,
+    account_id: formData.get("account_id") || null,
+    active: true,
+  });
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  const { error } = await supabase.from("subscriptions").insert({ user_id: user.id, ...parsed });
+  if (error) throw error;
+
+  revalidatePath("/dashboard/suscripciones");
+}
+
+export async function deleteSubscription(subscriptionId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("subscriptions").delete().eq("id", subscriptionId);
+  if (error) throw error;
+  revalidatePath("/dashboard/suscripciones");
+}
+
+export async function toggleSubscription(subscriptionId: string, currentActive: boolean) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("subscriptions")
+    .update({ active: !currentActive })
+    .eq("id", subscriptionId);
+  if (error) throw error;
+  revalidatePath("/dashboard/suscripciones");
+}
+
+export async function registerSubscriptionPayment(subscriptionId: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  // Buscar la suscripción
+  const { data: sub, error: subErr } = await supabase
+    .from("subscriptions")
+    .select("*")
+    .eq("id", subscriptionId)
+    .single();
+  if (subErr || !sub) throw new Error("Suscripción no encontrada");
+
+  // Crear gasto
+  const { data: profile } = await supabase.from("users").select("base_currency").eq("id", user.id).single();
+  const baseCurrency = profile?.base_currency ?? "ARS";
+  const rate = sub.currency === baseCurrency ? 1 : await fetchRate(supabase, sub.currency, baseCurrency);
+
+  const { error: txErr } = await supabase.from("transactions").insert({
+    user_id: user.id,
+    type: "expense",
+    amount: sub.amount,
+    currency: sub.currency,
+    amount_base: sub.amount * rate,
+    exchange_rate: rate,
+    category_id: sub.category_id,
+    account_id: sub.account_id,
+    note: `Suscripción: ${sub.name}`,
+    date: new Date().toISOString().slice(0, 10),
+    source: "manual",
+  });
+  if (txErr) throw txErr;
+
+  // Ajustar saldo de la cuenta
+  if (sub.account_id) {
+    const { data: acc } = await supabase.from("accounts").select("balance").eq("id", sub.account_id).single();
+    if (acc) {
+      await supabase.from("accounts").update({ balance: acc.balance - sub.amount }).eq("id", sub.account_id);
+    }
+  }
+
+  // Avanzar next_date según cadencia
+  const nextDate = new Date(sub.next_date + "T00:00:00");
+  switch (sub.cadence) {
+    case "weekly": nextDate.setDate(nextDate.getDate() + 7); break;
+    case "monthly": nextDate.setMonth(nextDate.getMonth() + 1); break;
+    case "quarterly": nextDate.setMonth(nextDate.getMonth() + 3); break;
+    case "yearly": nextDate.setFullYear(nextDate.getFullYear() + 1); break;
+  }
+
+  await supabase
+    .from("subscriptions")
+    .update({ next_date: nextDate.toISOString().slice(0, 10) })
+    .eq("id", subscriptionId);
+
+  revalidatePath("/dashboard/suscripciones");
+  revalidatePath("/dashboard");
 }
 
 // ----------------------------------------------------------------------------

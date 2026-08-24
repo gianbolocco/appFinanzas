@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Wallet, PieChart, TrendingUp, Settings, Plus, Landmark, Tags } from "lucide-react";
+import { Home, Wallet, PieChart, TrendingUp, Settings, Plus, Landmark, Tags, Target, RefreshCw } from "lucide-react";
 import { useState } from "react";
 
 import { TransactionSheet } from "@/components/transaction-sheet";
@@ -11,6 +11,8 @@ const NAV_ITEMS = [
   { href: "/dashboard", icon: Home, label: "Inicio", exact: true },
   { href: "/dashboard/gastos", icon: Wallet, label: "Gastos" },
   { href: "/dashboard/presupuestos", icon: PieChart, label: "Presupuestos" },
+  { href: "/dashboard/metas", icon: Target, label: "Metas" },
+  { href: "/dashboard/suscripciones", icon: RefreshCw, label: "Suscripciones" },
   { href: "/dashboard/reportes", icon: TrendingUp, label: "Reportes" },
   { href: "/dashboard/cuentas", icon: Landmark, label: "Cuentas" },
   { href: "/dashboard/categorias", icon: Tags, label: "Categorías" },

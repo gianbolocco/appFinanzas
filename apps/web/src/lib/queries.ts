@@ -133,6 +133,127 @@ export async function getAccountTransactions(accountId: string) {
   if (error) throw error;
   return data;
 }
+
+// ----------------------------------------------------------------------------
+// Presupuestos (con cálculo de gastado por categoría en el mes)
+// ----------------------------------------------------------------------------
+export async function getBudgets() {
+  const supabase = await createClient();
+  const now = new Date();
+  const from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+
+  const { data: budgets, error } = await supabase
+    .from("budgets")
+    .select("*, category:categories(*)")
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+
+  // Buscar gastos del mes agrupados por categoría
+  const { data: expenses } = await supabase
+    .from("transactions")
+    .select("category_id, amount, amount_base")
+    .eq("type", "expense")
+    .gte("date", from);
+
+  const spentByCategory: Record<string, number> = {};
+  for (const e of expenses ?? []) {
+    if (e.category_id) {
+      spentByCategory[e.category_id] = (spentByCategory[e.category_id] ?? 0) + e.amount;
+    }
+  }
+
+  return budgets.map((b) => ({
+    ...b,
+    spent: b.category_id ? spentByCategory[b.category_id] ?? 0 : 0,
+  }));
+}
+
+// ----------------------------------------------------------------------------
+// Metas de ahorro (con progreso y sugerencia de aporte mensual)
+// ----------------------------------------------------------------------------
+export async function getGoals() {
+  const supabase = await createClient();
+  const { data: goals, error } = await supabase
+    .from("goals")
+    .select("*")
+    .order("archived", { ascending: true })
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+
+  const now = new Date();
+
+  return goals.map((g) => {
+    const progress = g.target_amount > 0 ? (g.current_amount / g.target_amount) * 100 : 0;
+    const remaining = Math.max(0, g.target_amount - g.current_amount);
+    const targetDate = g.target_date ? new Date(g.target_date + "T00:00:00") : null;
+    const monthsLeft = targetDate
+      ? Math.max(1, (targetDate.getFullYear() - now.getFullYear()) * 12 + (targetDate.getMonth() - now.getMonth()))
+      : null;
+    const suggestedMonthly = monthsLeft && remaining > 0 ? remaining / monthsLeft : null;
+
+    return {
+      ...g,
+      progress: Math.min(100, progress),
+      remaining,
+      monthsLeft,
+      suggestedMonthly,
+      isCompleted: g.current_amount >= g.target_amount,
+    };
+  });
+}
+
+export async function getGoalContributions(goalId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("goal_contributions")
+    .select("*")
+    .eq("goal_id", goalId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+// ----------------------------------------------------------------------------
+// Suscripciones (con total mensual y alertas)
+// ----------------------------------------------------------------------------
+export async function getSubscriptions() {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("subscriptions")
+    .select("*, category:categories(*), account:accounts(*)")
+    .order("active", { ascending: false })
+    .order("next_date", { ascending: true });
+  if (error) throw error;
+
+  const now = new Date();
+  const inSevenDays = new Date(now);
+  inSevenDays.setDate(inSevenDays.getDate() + 7);
+
+  // Calcular equivalente mensual de cada suscripción
+  const monthlyFactor: Record<string, number> = {
+    weekly: 4.33,
+    monthly: 1,
+    quarterly: 1 / 3,
+    yearly: 1 / 12,
+  };
+
+  return data.map((s) => {
+    const nextDate = new Date(s.next_date + "T00:00:00");
+    const daysUntil = Math.ceil((nextDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    return {
+      ...s,
+      monthlyEquivalent: s.amount * (monthlyFactor[s.cadence] ?? 1),
+      daysUntil,
+      isDueSoon: s.active && daysUntil <= 7 && daysUntil >= 0,
+      isOverdue: s.active && daysUntil < 0,
+    };
+  });
+}
+
+export async function getSubscriptionsMonthlyTotal() {
+  const subs = await getSubscriptions();
+  return subs.filter((s) => s.active).reduce((sum, s) => sum + s.monthlyEquivalent, 0);
+}
 export async function getTransactions(opts?: {
   limit?: number;
   type?: string;
