@@ -164,7 +164,7 @@ export async function POST(req: Request) {
 
     const [{ data: userProfile }, { data: categories }, { data: accounts }] = await Promise.all([
       supabaseAdmin.from("users").select("base_currency").eq("id", userId).single(),
-      supabaseAdmin.from("categories").select("id, name, type").eq("user_id", userId),
+      supabaseAdmin.from("categories").select("id, name").eq("user_id", userId),
       supabaseAdmin.from("accounts").select("id, name, currency, is_default").eq("user_id", userId),
     ]);
 
