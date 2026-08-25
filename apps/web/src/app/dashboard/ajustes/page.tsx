@@ -1,10 +1,13 @@
 import { getCurrentUser } from "@/lib/dal";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { TelegramLink } from "./telegram-link";
+import { getTelegramStatus } from "@/lib/telegram-actions";
 import { LogoutButton } from "./logout-button";
 import { SettingsForm } from "./settings-form";
 
-export default async function AjustesPage() {
+export default async function SettingsPage() {
   const { profile } = await getCurrentUser();
+  const telegramStatus = await getTelegramStatus();
 
   return (
     <div className="flex flex-col gap-5">
@@ -28,6 +31,11 @@ export default async function AjustesPage() {
           <span className="text-sm text-muted-foreground">Email</span>
           <span className="text-sm font-medium">{profile.email}</span>
         </div>
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <h2 className="text-sm font-semibold text-muted-foreground">Integraciones</h2>
+        <TelegramLink initialStatus={telegramStatus} />
       </section>
 
       <LogoutButton />
