@@ -6,6 +6,8 @@ import { Plus, Trash2, Loader2, Archive, Target, ChevronDown, ChevronUp } from "
 import { createGoal, deleteGoal, archiveGoal, contributeToGoal } from "@/lib/actions";
 import { formatMoney, formatDate } from "@/lib/format";
 import { Modal } from "@/components/modal";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { toast } from "sonner";
 
 type Goal = {
   id: string;
@@ -27,6 +29,7 @@ export function GoalList({ goals, baseCurrency }: { goals: Goal[]; baseCurrency:
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   const active = goals.filter((g) => !g.archived);
   const archived = goals.filter((g) => g.archived);
@@ -38,9 +41,12 @@ export function GoalList({ goals, baseCurrency }: { goals: Goal[]; baseCurrency:
     startTransition(async () => {
       try {
         await createGoal(fd);
+        toast.success("Meta creada");
         setShowForm(false);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Error");
+        const msg = err instanceof Error ? err.message : "Error al crear";
+        setError(msg);
+        toast.error(msg);
       }
     });
   }
@@ -51,21 +57,28 @@ export function GoalList({ goals, baseCurrency }: { goals: Goal[]; baseCurrency:
     startTransition(async () => {
       try {
         await contributeToGoal(goalId, fd);
+        toast.success("Aporte registrado");
         (e.target as HTMLFormElement).reset();
         setExpandedId(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Error");
+        const msg = err instanceof Error ? err.message : "Error al aportar";
+        setError(msg);
+        toast.error(msg);
       }
     });
   }
 
   function handleDelete(id: string) {
-    if (!confirm("¿Eliminar esta meta?")) return;
     startTransition(async () => {
       try {
         await deleteGoal(id);
+        toast.success("Meta eliminada");
+        setConfirmDelete(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Error");
+        const msg = err instanceof Error ? err.message : "Error al eliminar";
+        setError(msg);
+        toast.error(msg);
+        setConfirmDelete(null);
       }
     });
   }
@@ -74,8 +87,11 @@ export function GoalList({ goals, baseCurrency }: { goals: Goal[]; baseCurrency:
     startTransition(async () => {
       try {
         await archiveGoal(id);
+        toast.success("Meta archivada");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Error");
+        const msg = err instanceof Error ? err.message : "Error al archivar";
+        setError(msg);
+        toast.error(msg);
       }
     });
   }
@@ -187,7 +203,7 @@ export function GoalList({ goals, baseCurrency }: { goals: Goal[]; baseCurrency:
                 </button>
               )}
               <button
-                onClick={() => handleDelete(g.id)}
+                onClick={() => setConfirmDelete(g.id)}
                 className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border border-border bg-background text-xs font-medium text-destructive transition hover:bg-destructive/5"
               >
                 <Trash2 className="h-3.5 w-3.5" /> Eliminar
@@ -287,6 +303,16 @@ export function GoalList({ goals, baseCurrency }: { goals: Goal[]; baseCurrency:
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onOpenChange={(o) => { if (!o) setConfirmDelete(null) }}
+        title="¿Eliminar meta?"
+        description="Se borrarán la meta y todos sus aportes. Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        destructive
+        onConfirm={() => confirmDelete && handleDelete(confirmDelete)}
+      />
     </div>
   );
 }

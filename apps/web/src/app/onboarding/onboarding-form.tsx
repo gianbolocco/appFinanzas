@@ -9,13 +9,6 @@ import { createClient } from "@/lib/supabase-browser";
 const CURRENCIES = [
   { code: "ARS", label: "Peso argentino", symbol: "$" },
   { code: "USD", label: "Dólar", symbol: "US$" },
-  { code: "EUR", label: "Euro", symbol: "€" },
-  { code: "BRL", label: "Real", symbol: "R$" },
-  { code: "CLP", label: "Peso chileno", symbol: "CLP$" },
-  { code: "COP", label: "Peso colombiano", symbol: "COL$" },
-  { code: "MXN", label: "Peso mexicano", symbol: "MX$" },
-  { code: "PEN", label: "Sol peruano", symbol: "S/" },
-  { code: "UYU", label: "Peso uruguayo", symbol: "$U" },
 ];
 
 const ACCOUNT_PRESETS = [

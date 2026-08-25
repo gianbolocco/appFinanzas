@@ -128,3 +128,18 @@
     @apply font-sans;
   }
 }
+
+@layer utilities {
+  .glass {
+    @apply bg-card/70 backdrop-blur-xl border border-border/50 shadow-sm dark:bg-card/40 dark:border-white/10;
+  }
+  .glass-panel {
+    @apply bg-background/60 backdrop-blur-2xl border border-border/40;
+  }
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent;
+  }
+  .bg-gradient-premium {
+    @apply bg-gradient-to-br from-primary via-primary/80 to-accent;
+  }
+}

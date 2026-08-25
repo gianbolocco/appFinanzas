@@ -27,18 +27,14 @@ export function Modal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[92vh] flex-col gap-0 overflow-hidden rounded-t-3xl p-0 bottom-0 top-auto translate-y-0 left-1/2 -translate-x-1/2 w-full max-w-[calc(100%-1.5rem)] sm:max-w-md md:max-w-md lg:top-1/2 lg:bottom-auto lg:-translate-y-1/2 lg:rounded-3xl"
+        showCloseButton={false}
+        className="max-h-[96vh] flex flex-col gap-0 overflow-hidden rounded-3xl p-0 top-auto bottom-2 left-1/2 -translate-x-1/2 translate-y-0 w-[calc(100%-1rem)] max-w-md sm:top-1/2 sm:bottom-auto sm:-translate-y-1/2 sm:w-full border border-border/50 bg-card shadow-2xl"
       >
-        {/* Mobile drag handle */}
-        <div className="flex justify-center pt-3 lg:hidden">
-          <div className="h-1 w-10 rounded-full bg-muted-foreground/30" />
-        </div>
-
-        <DialogHeader className="flex-row items-center justify-between border-b border-border px-5 py-4">
-          <DialogTitle className="text-base font-semibold">{title}</DialogTitle>
+        <DialogHeader className="flex-row items-center justify-between border-b border-border/50 px-6 py-4">
+          <DialogTitle className="text-lg font-semibold">{title}</DialogTitle>
           <DialogClose
             render={
-              <Button variant="ghost" size="icon-sm" className="ml-auto" />
+              <Button variant="ghost" size="icon-sm" className="ml-auto rounded-full bg-muted/50 hover:bg-muted" />
             }
           >
             <X className="h-5 w-5" />

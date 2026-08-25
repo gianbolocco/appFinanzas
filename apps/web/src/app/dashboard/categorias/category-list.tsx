@@ -6,6 +6,8 @@ import { Plus, Trash2, Loader2, Pencil, type LucideIcon } from "lucide-react";
 import { createCategory, updateCategory, deleteCategory } from "@/lib/actions";
 import { getCategoryIcon, ICON_NAMES } from "@/lib/category-icons";
 import { Modal } from "@/components/modal";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { toast } from "sonner";
 
 type Category = {
   id: string;
@@ -44,6 +46,7 @@ export function CategoryList({ categories }: { categories: Category[] }) {
   const [editing, setEditing] = useState<Category | null>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   const predefined = categories.filter((c) => c.is_predefined);
   const custom = categories.filter((c) => !c.is_predefined);
@@ -56,26 +59,34 @@ export function CategoryList({ categories }: { categories: Category[] }) {
       try {
         if (editing) {
           await updateCategory(editing.id, fd);
+          toast.success("Categoría actualizada");
         } else {
           await createCategory(fd);
+          toast.success("Categoría creada");
         }
         setShowForm(false);
         setEditing(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Error");
+        const msg = err instanceof Error ? err.message : "Error al guardar";
+        setError(msg);
+        toast.error(msg);
       }
     });
   }
 
   function handleDelete(id: string) {
-    if (!confirm("¿Eliminar esta categoría?")) return;
     startTransition(async () => {
       try {
         await deleteCategory(id);
+        toast.success("Categoría eliminada");
         setShowForm(false);
         setEditing(null);
+        setConfirmDelete(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Error");
+        const msg = err instanceof Error ? err.message : "Error al eliminar";
+        setError(msg);
+        toast.error(msg);
+        setConfirmDelete(null);
       }
     });
   }
@@ -158,7 +169,7 @@ export function CategoryList({ categories }: { categories: Category[] }) {
                     <Pencil className="h-4 w-4" />
                   </button>
                   <button
-                    onClick={() => handleDelete(c.id)}
+                    onClick={() => setConfirmDelete(c.id)}
                     className="rounded-lg p-1.5 text-muted-foreground opacity-0 transition hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
                     aria-label="Eliminar"
                   >
@@ -191,9 +202,19 @@ export function CategoryList({ categories }: { categories: Category[] }) {
           error={error}
           onSubmit={handleSubmit}
           onCancel={closeForm}
-          onDelete={editing ? () => handleDelete(editing.id) : undefined}
+          onDelete={editing ? () => setConfirmDelete(editing.id) : undefined}
         />
       </Modal>
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onOpenChange={(o) => { if (!o) setConfirmDelete(null) }}
+        title="¿Eliminar categoría?"
+        description="Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        destructive
+        onConfirm={() => confirmDelete && handleDelete(confirmDelete)}
+      />
     </div>
   );
 }

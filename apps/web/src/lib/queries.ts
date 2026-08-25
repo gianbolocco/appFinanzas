@@ -252,7 +252,10 @@ export async function getSubscriptions() {
 
 export async function getSubscriptionsMonthlyTotal() {
   const subs = await getSubscriptions();
-  return subs.filter((s) => s.active).reduce((sum, s) => sum + s.monthlyEquivalent, 0);
+  return subs.filter((s) => s.active).reduce<Record<string, number>>((acc, s) => {
+    acc[s.currency] = (acc[s.currency] ?? 0) + s.monthlyEquivalent;
+    return acc;
+  }, {});
 }
 
 // Historial de pagos de una suscripción

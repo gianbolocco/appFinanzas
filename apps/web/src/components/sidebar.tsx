@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Wallet, PieChart, TrendingUp, Settings, Plus, Landmark, Tags, Target, RefreshCw } from "lucide-react";
 import { useState } from "react";
+import { motion } from "motion/react";
 
 import { TransactionSheet } from "@/components/transaction-sheet";
 
@@ -44,10 +45,10 @@ export function Sidebar({
 
   return (
     <>
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-card/50 p-4 lg:flex">
-        <div className="mb-8 flex items-center gap-2 px-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <span className="text-sm font-bold">G</span>
+      <aside className="hidden w-[260px] shrink-0 flex-col border-r border-border/50 glass-panel p-4 lg:flex shadow-xl shadow-black/5 z-20">
+        <div className="mb-8 flex items-center gap-3 px-2">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-premium text-primary-foreground shadow-lg shadow-primary/20">
+            <span className="text-base font-bold">G</span>
           </div>
           <span className="text-lg font-semibold tracking-tight">Guita</span>
         </div>
@@ -59,22 +60,32 @@ export function Sidebar({
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground"}`}
+                className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${isActive ? "text-primary" : "text-muted-foreground hover:text-foreground hover:bg-foreground/5"}`}
               >
-                <item.icon className={`h-5 w-5 ${isActive ? "fill-primary/20" : ""}`} />
-                {item.label}
+                {isActive && (
+                  <motion.div
+                    layoutId="sidebar-active"
+                    className="absolute inset-0 rounded-xl bg-primary/10 dark:bg-primary/20"
+                    initial={false}
+                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                  />
+                )}
+                <item.icon className={`h-5 w-5 z-10 transition-transform group-hover:scale-110 ${isActive ? "fill-primary/20" : ""}`} />
+                <span className="z-10">{item.label}</span>
               </Link>
             );
           })}
         </nav>
 
-        <button
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
           onClick={() => setSheetOpen(true)}
-          className="mt-4 flex h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:opacity-90 active:scale-[0.98]"
+          className="mt-6 flex h-11 items-center justify-center gap-2 rounded-xl bg-gradient-premium px-4 text-sm font-medium text-primary-foreground shadow-lg shadow-primary/25 transition-shadow hover:shadow-primary/40"
         >
           <Plus className="h-5 w-5" />
           Agregar movimiento
-        </button>
+        </motion.button>
       </aside>
 
       <TransactionSheet

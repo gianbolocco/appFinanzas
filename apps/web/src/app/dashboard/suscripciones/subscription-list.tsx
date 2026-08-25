@@ -25,6 +25,8 @@ import {
 } from "@/lib/actions";
 import { formatMoney, formatDate } from "@/lib/format";
 import { Modal } from "@/components/modal";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { toast } from "sonner";
 
 type Subscription = {
   id: string;
@@ -61,7 +63,7 @@ const CADENCE_LABELS: Record<string, string> = {
   yearly: "Anual",
 };
 
-const CURRENCIES = ["ARS", "USD", "EUR", "BRL", "MXN", "CLP", "COP", "PEN", "UYU"];
+const CURRENCIES = ["ARS", "USD"];
 
 export function SubscriptionList({
   subscriptions,
@@ -81,6 +83,8 @@ export function SubscriptionList({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [confirmPayment, setConfirmPayment] = useState<string | null>(null);
 
   const active = subscriptions.filter((s) => s.active);
   const paused = subscriptions.filter((s) => !s.active);
@@ -112,12 +116,16 @@ export function SubscriptionList({
       try {
         if (editing) {
           await updateSubscription(editing.id, fd);
+          toast.success("Suscripción actualizada");
         } else {
           await createSubscription(fd);
+          toast.success("Suscripción creada");
         }
         closeForm();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Error");
+        const msg = err instanceof Error ? err.message : "Error al guardar";
+        setError(msg);
+        toast.error(msg);
       }
     });
   }
@@ -126,31 +134,42 @@ export function SubscriptionList({
     startTransition(async () => {
       try {
         await toggleSubscription(id, currentActive);
+        toast.success(currentActive ? "Suscripción pausada" : "Suscripción activada");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Error");
+        const msg = err instanceof Error ? err.message : "Error";
+        setError(msg);
+        toast.error(msg);
       }
     });
   }
 
   function handleDelete(id: string) {
-    if (!confirm("¿Eliminar esta suscripción?")) return;
     startTransition(async () => {
       try {
         await deleteSubscription(id);
+        toast.success("Suscripción eliminada");
         closeForm();
+        setConfirmDelete(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Error");
+        const msg = err instanceof Error ? err.message : "Error al eliminar";
+        setError(msg);
+        toast.error(msg);
+        setConfirmDelete(null);
       }
     });
   }
 
   function handlePayment(id: string) {
-    if (!confirm("¿Registrar el pago de esta suscripción? Se creará un gasto.")) return;
     startTransition(async () => {
       try {
         await registerSubscriptionPayment(id);
+        toast.success("Pago registrado");
+        setConfirmPayment(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Error");
+        const msg = err instanceof Error ? err.message : "Error al registrar pago";
+        setError(msg);
+        toast.error(msg);
+        setConfirmPayment(null);
       }
     });
   }
@@ -223,17 +242,15 @@ export function SubscriptionList({
         <div className="mt-3 flex flex-wrap gap-2">
           {s.active && (
             <button
-              onClick={() => handlePayment(s.id)}
-              disabled={pending}
-              className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50"
+              onClick={() => { if (!pending) handlePayment(s.id) }}
+              className={`flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground transition hover:opacity-90 ${pending ? "opacity-50 pointer-events-none" : ""}`}
             >
               <CheckCircle2 className="h-3.5 w-3.5" /> Registrar pago
             </button>
           )}
           <button
-            onClick={() => handleToggle(s.id, s.active)}
-            disabled={pending}
-            className="flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-xs font-medium transition hover:bg-accent"
+            onClick={() => { if (!pending) handleToggle(s.id, s.active) }}
+            className={`flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-xs font-medium transition hover:bg-accent ${pending ? "opacity-50 pointer-events-none" : ""}`}
           >
             {s.active ? (
               <><Pause className="h-3.5 w-3.5" /> Pausar</>
@@ -384,17 +401,27 @@ function SubscriptionForm({
             className="h-11 rounded-xl border border-input bg-background px-3 font-mono text-sm tabular-nums outline-none focus:border-primary"
           />
         </div>
-        <div className="flex w-28 flex-col gap-1.5">
+        <div className="flex w-[104px] shrink-0 flex-col gap-1.5">
           <label className="text-sm font-medium">Moneda</label>
-          <select
-            name="currency"
-            defaultValue={editing?.currency ?? baseCurrency}
-            className="h-11 rounded-xl border border-input bg-background px-2 text-sm outline-none focus:border-primary"
-          >
+          <div className="flex h-11 w-full rounded-xl bg-muted p-1">
             {CURRENCIES.map((c) => (
-              <option key={c} value={c}>{c}</option>
+              <label
+                key={c}
+                className="relative flex flex-1 cursor-pointer items-center justify-center"
+              >
+                <input
+                  type="radio"
+                  name="currency"
+                  value={c}
+                  defaultChecked={c === (editing?.currency ?? baseCurrency)}
+                  className="peer sr-only"
+                />
+                <div className="flex h-full w-full items-center justify-center rounded-lg text-xs font-semibold text-muted-foreground transition-all peer-checked:bg-primary peer-checked:text-primary-foreground peer-checked:shadow-sm hover:bg-muted/50 peer-checked:hover:bg-primary">
+                  {c}
+                </div>
+              </label>
             ))}
-          </select>
+          </div>
         </div>
       </div>
 

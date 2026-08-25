@@ -38,7 +38,7 @@ const TYPE_TABS = [
   { value: "transfer", label: "Transferencia" },
 ] as const;
 
-const CURRENCIES = ["ARS", "USD", "EUR", "BRL", "MXN", "CLP", "COP", "PEN", "UYU"];
+const CURRENCIES = ["ARS", "USD"];
 
 export function TransactionSheet({
   open,
@@ -192,29 +192,42 @@ function TransactionSheetInner({
         {/* Monto */}
         <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium">Monto</label>
-          <div className="flex gap-2">
-            <input
-              name="amount"
-              type="number"
-              step="0.01"
-              inputMode="decimal"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0,00"
-              required
-              autoFocus
-              className="h-12 flex-1 rounded-xl border border-input bg-card px-4 font-mono text-lg tabular-nums outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-            />
-            <select
-              name="currency"
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value)}
-              className="h-12 w-24 rounded-xl border border-input bg-card px-2 text-sm outline-none focus:border-primary"
-            >
-              {CURRENCIES.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
+          <input
+            name="amount"
+            type="number"
+            step="0.01"
+            inputMode="decimal"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="0,00"
+            required
+            autoFocus
+            className="h-12 w-full rounded-xl border border-input bg-card px-4 font-mono text-lg tabular-nums outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+          />
+        </div>
+
+        {/* Moneda */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium">Moneda</label>
+          <div className="flex h-12 w-full rounded-xl bg-muted p-1">
+            {CURRENCIES.map((c) => (
+              <label
+                key={c}
+                className="relative flex flex-1 cursor-pointer items-center justify-center"
+              >
+                <input
+                  type="radio"
+                  name="currency"
+                  value={c}
+                  checked={currency === c}
+                  onChange={(e) => setCurrency(e.target.value)}
+                  className="peer sr-only"
+                />
+                <div className="flex h-full w-full items-center justify-center rounded-lg text-sm font-semibold text-muted-foreground transition-all peer-checked:bg-primary peer-checked:text-primary-foreground peer-checked:shadow-sm hover:bg-muted/50 peer-checked:hover:bg-primary">
+                  {c}
+                </div>
+              </label>
+            ))}
           </div>
         </div>
 

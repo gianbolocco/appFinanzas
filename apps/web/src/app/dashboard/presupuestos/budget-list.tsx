@@ -7,6 +7,8 @@ import { createBudget, deleteBudget } from "@/lib/actions";
 import { formatMoney } from "@/lib/format";
 import { getCategoryIcon } from "@/lib/category-icons";
 import { Modal } from "@/components/modal";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { toast } from "sonner";
 
 type Budget = {
   id: string;
@@ -42,6 +44,7 @@ export function BudgetList({
   const [showForm, setShowForm] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   const availableCategories = categories.filter(
     (c) => !budgets.some((b) => b.category_id === c.id),
@@ -54,20 +57,27 @@ export function BudgetList({
     startTransition(async () => {
       try {
         await createBudget(fd);
+        toast.success("Presupuesto creado");
         setShowForm(false);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Error");
+        const msg = err instanceof Error ? err.message : "Error al crear";
+        setError(msg);
+        toast.error(msg);
       }
     });
   }
 
   function handleDelete(id: string) {
-    if (!confirm("¿Eliminar este presupuesto?")) return;
     startTransition(async () => {
       try {
         await deleteBudget(id);
+        toast.success("Presupuesto eliminado");
+        setConfirmDelete(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Error");
+        const msg = err instanceof Error ? err.message : "Error al eliminar";
+        setError(msg);
+        toast.error(msg);
+        setConfirmDelete(null);
       }
     });
   }
@@ -109,7 +119,7 @@ export function BudgetList({
                 </div>
                 <span className={`text-xs font-medium ${status.text}`}>{status.label}</span>
                 <button
-                  onClick={() => handleDelete(b.id)}
+                  onClick={() => setConfirmDelete(b.id)}
                   className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive lg:opacity-0 lg:group-hover:opacity-100"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -193,6 +203,16 @@ export function BudgetList({
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onOpenChange={(o) => { if (!o) setConfirmDelete(null) }}
+        title="¿Eliminar presupuesto?"
+        description="Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        destructive
+        onConfirm={() => confirmDelete && handleDelete(confirmDelete)}
+      />
     </div>
   );
 }

@@ -35,7 +35,7 @@ const TYPE_LABELS: Record<string, string> = {
   savings: "Ahorro",
 };
 
-const CURRENCIES = ["ARS", "USD", "EUR", "BRL", "MXN", "CLP", "COP", "PEN", "UYU"];
+const CURRENCIES = ["ARS", "USD"];
 
 export function AccountList({
   accounts,
@@ -154,17 +154,27 @@ export function AccountList({
                 ))}
               </select>
             </div>
-            <div className="flex w-24 flex-col gap-1.5">
+            <div className="flex w-[104px] shrink-0 flex-col gap-1.5">
               <label className="text-sm font-medium">Moneda</label>
-              <select
-                name="currency"
-                defaultValue={baseCurrency}
-                className="h-11 rounded-xl border border-input bg-background px-2 text-sm outline-none focus:border-primary"
-              >
+              <div className="flex h-11 w-full rounded-xl bg-muted p-1">
                 {CURRENCIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
+                  <label
+                    key={c}
+                    className="relative flex flex-1 cursor-pointer items-center justify-center"
+                  >
+                    <input
+                      type="radio"
+                      name="currency"
+                      value={c}
+                      defaultChecked={c === baseCurrency}
+                      className="peer sr-only"
+                    />
+                    <div className="flex h-full w-full items-center justify-center rounded-lg text-xs font-semibold text-muted-foreground transition-all peer-checked:bg-primary peer-checked:text-primary-foreground peer-checked:shadow-sm hover:bg-muted/50 peer-checked:hover:bg-primary">
+                      {c}
+                    </div>
+                  </label>
                 ))}
-              </select>
+              </div>
             </div>
           </div>
           <div className="flex flex-col gap-1.5">

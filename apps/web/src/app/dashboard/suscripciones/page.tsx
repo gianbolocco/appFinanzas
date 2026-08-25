@@ -35,15 +35,44 @@ export default async function SuscripcionesPage() {
         </p>
       </header>
 
-      {/* Total mensual recurrente */}
-      <section className="rounded-3xl bg-primary p-5 text-primary-foreground shadow-sm">
-        <p className="text-sm/none opacity-80">Gasto recurrente mensual</p>
-        <p className="mt-2 font-mono text-3xl font-semibold tabular-nums">
-          {formatMoney(monthlyTotal, profile.base_currency)}
-        </p>
-        <p className="mt-2 text-sm opacity-80">
-          Equivalente mensual de todas tus suscripciones activas
-        </p>
+      <section className="relative overflow-hidden rounded-3xl border border-zinc-800/50 bg-zinc-950 p-6 text-zinc-50 shadow-2xl">
+        <div className="absolute inset-0 bg-gradient-to-br from-zinc-800/20 via-transparent to-transparent"></div>
+        
+        <div className="relative z-10">
+          <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400">Compromiso Mensual</p>
+          <div className="mt-6 flex flex-col gap-5">
+            {Object.keys(monthlyTotal).length > 0 ? (
+              Object.entries(monthlyTotal).map(([cur, total], i, arr) => (
+                <div key={cur} className={`flex items-end justify-between ${i !== arr.length - 1 ? "border-b border-zinc-800/50 pb-5" : ""}`}>
+                  <div className="flex flex-col gap-1">
+                    <p className="text-sm font-medium text-zinc-400">Gasto en {cur}</p>
+                    <p className="font-mono text-3xl font-semibold tracking-tight tabular-nums">
+                      {formatMoney(total, cur)}
+                    </p>
+                  </div>
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-zinc-800/50 text-zinc-300 shadow-inner">
+                    <span className="text-[10px] font-bold">{cur}</span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="flex items-end justify-between">
+                <div className="flex flex-col gap-1">
+                  <p className="text-sm font-medium text-zinc-400">Gasto en {profile.base_currency}</p>
+                  <p className="font-mono text-3xl font-semibold tracking-tight tabular-nums">
+                    {formatMoney(0, profile.base_currency)}
+                  </p>
+                </div>
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-zinc-800/50 text-zinc-300 shadow-inner">
+                  <span className="text-[10px] font-bold">{profile.base_currency}</span>
+                </div>
+              </div>
+            )}
+          </div>
+          <p className="mt-6 text-xs text-zinc-500">
+            Equivalente mensual de todas tus suscripciones activas
+          </p>
+        </div>
       </section>
 
       <SubscriptionList
