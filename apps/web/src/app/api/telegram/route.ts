@@ -44,7 +44,7 @@ async function downloadTelegramFile(fileId: string) {
   const arrayBuffer = await fileRes.arrayBuffer();
   return {
     buffer: Buffer.from(arrayBuffer),
-    mimeType: filePath.endsWith('.ogg') ? 'audio/ogg' : 'image/jpeg'
+    mimeType: (filePath.endsWith('.ogg') || filePath.endsWith('.oga') || filePath.startsWith('voice/')) ? 'audio/ogg' : 'image/jpeg'
   };
 }
 
@@ -252,11 +252,7 @@ export async function POST(req: Request) {
 
     const fileParts: any[] = [];
     if (fileBuffer && fileMimeType) {
-      if (fileMimeType.startsWith("image/")) {
-        fileParts.push({ type: "image", image: fileBuffer });
-      } else {
-        fileParts.push({ type: "file", data: fileBuffer, mimeType: fileMimeType });
-      }
+      fileParts.push({ type: "file", data: fileBuffer, mimeType: fileMimeType });
     }
 
     const systemPrompt = `Sos un asistente inteligente de finanzas personales, amable y con buena onda.
