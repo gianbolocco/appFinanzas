@@ -48,7 +48,11 @@ export async function POST(req: Request) {
       return new Response("Unauthorized", { status: 401 });
     }
 
-    const update = await req.json();
+    let parsedUpdate: any = null;
+    try {
+      parsedUpdate = await req.json();
+    } catch(e) {}
+    const update = parsedUpdate || {};
 
     // ----------------------------------------------------------------------
     // Manejo de botones interactivos (Callback Queries)
@@ -246,8 +250,14 @@ export async function POST(req: Request) {
     });
 
     return new Response("OK");
-  } catch (err) {
+  } catch (err: any) {
     console.error("Webhook Error:", err);
-    return new Response("Error", { status: 500 });
+    try {
+      const chatId = update.message?.chat?.id || update.callback_query?.message?.chat?.id;
+      if (chatId) {
+        await sendTelegramMessage(chatId.toString(), "❌ Ocurrió un error inesperado al procesar. Reintentá en unos segundos.");
+      }
+    } catch(e) {}
+    return new Response("OK", { status: 200 });
   }
 }
