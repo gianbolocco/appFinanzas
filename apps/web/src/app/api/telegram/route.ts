@@ -106,6 +106,21 @@ export async function POST(req: Request) {
           console.error(txError);
           await editTelegramMessage(chatId, messageId, "❌ Error al guardar en la base de datos.");
         } else {
+          // Actualizar saldo de la cuenta
+          const sign = pendingTx.type === "income" ? 1 : -1;
+          const { data: acc } = await supabaseAdmin
+            .from("accounts")
+            .select("balance")
+            .eq("id", pendingTx.account_id)
+            .single();
+          
+          if (acc) {
+            await supabaseAdmin
+              .from("accounts")
+              .update({ balance: acc.balance + (sign * pendingTx.amount) })
+              .eq("id", pendingTx.account_id);
+          }
+
           await supabaseAdmin.from("pending_bot_transactions").delete().eq("id", pendingId);
           await editTelegramMessage(chatId, messageId, "✅ ¡Movimiento guardado con éxito!");
         }
