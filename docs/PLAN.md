@@ -52,8 +52,12 @@ Roadmap dividido en fases incrementales. Cada fase entrega algo usable. Tiempos 
 - [ ] Tendencias temporales (línea).
 - [ ] Avance vs presupuesto (barras horizontales con estado).
 - [ ] Top gastos / Pareto (barras ordenadas + % acumulado).
-- [ ] Por método de pago (barras/torta).
-- [ ] Filtros globales de rango, categoría, cuenta, tipo.
+- [x] Gráficos de ingresos vs. gastos, top gastos por categoría.
+- [x] Filtros globales de rango (selector de período, 2026-08-24).
+
+> **Nota (2026-08-24):** las Fases 2–4 quedaron con defectos de integridad que se
+> corrigieron por separado. Ver [SPEC-FIXES.md](SPEC-FIXES.md) y el plan
+> `superpowers/plans/2026-08-24-fixes-datos-y-ux.md`.
 - [ ] Queries optimizadas (vistas materializadas o endpoints de agregación si hace falta).
 
 **Entregable:** dashboard de reportes completo.

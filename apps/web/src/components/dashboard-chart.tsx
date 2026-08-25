@@ -25,14 +25,14 @@ export function DashboardChart({
     const today = new Date();
     const result = [];
     let cumulative = 50000; // Starting dummy baseline
+    const variations = [5000, -2000, 15000, -8000, 3000, -1000, 12000];
     
     for (let i = 6; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(d.getDate() - i);
       const dayStr = d.toLocaleDateString('es-AR', { weekday: 'short' });
       
-      // Random dummy variation between -10000 and 20000
-      const variation = Math.floor(Math.random() * 30000) - 10000;
+      const variation = variations[i];
       cumulative += variation;
       
       result.push({

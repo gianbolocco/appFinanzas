@@ -3,7 +3,7 @@
 import { useTransition } from "react";
 import { registerSubscriptionPayment } from "@/lib/actions";
 import { formatMoney, formatDate } from "@/lib/format";
-import { CheckCircle2, AlertCircle, CalendarClock, Loader2 } from "lucide-react";
+import { CheckCircle2, CalendarClock, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 type Subscription = {
