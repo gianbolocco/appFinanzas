@@ -256,7 +256,7 @@ export async function POST(req: Request) {
     try {
       const chatId = update.message?.chat?.id || update.callback_query?.message?.chat?.id;
       if (chatId) {
-        await sendTelegramMessage(chatId.toString(), "❌ Ocurrió un error inesperado al procesar. Reintentá en unos segundos.");
+        await sendTelegramMessage(chatId.toString(), "❌ Error: " + (err.message || String(err)));
       }
     } catch(e) {}
     return new Response("OK", { status: 200 });
