@@ -252,7 +252,7 @@ export async function POST(req: Request) {
 
     const fileParts: any[] = [];
     if (fileBuffer && fileMimeType) {
-      fileParts.push({ type: "file", data: fileBuffer, mimeType: fileMimeType });
+      fileParts.push({ type: "file", data: fileBuffer, mediaType: fileMimeType });
     }
 
     const systemPrompt = `Sos un asistente inteligente de finanzas personales, amable y con buena onda.
