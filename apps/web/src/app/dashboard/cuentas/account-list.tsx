@@ -9,12 +9,20 @@ import { Modal } from "@/components/modal";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { toast } from "sonner";
 
+import Link from "next/link";
+
 type Account = {
   id: string;
   name: string;
   type: string;
   currency: string;
   balance: number;
+  stats: {
+    income: number;
+    expense: number;
+    transferIn: number;
+    transferOut: number;
+  };
 };
 
 const TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -40,6 +48,7 @@ const CURRENCIES = ["ARS", "USD"];
 export function AccountList({
   accounts,
   baseCurrency,
+  typeLabels,
 }: {
   accounts: Account[];
   baseCurrency: string;
@@ -84,42 +93,7 @@ export function AccountList({
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      {accounts.length === 0 && !showForm && (
-        <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
-          <p className="text-sm text-muted-foreground">No tenés cuentas todavía. Creá la primera.</p>
-        </div>
-      )}
-
-      {accounts.map((a) => {
-        const Icon = TYPE_ICONS[a.type] ?? Banknote;
-        return (
-          <div
-            key={a.id}
-            className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm"
-          >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-              <Icon className="h-5 w-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{a.name}</p>
-              <p className="text-xs text-muted-foreground">
-                {TYPE_LABELS[a.type] ?? a.type} · {a.currency}
-              </p>
-            </div>
-            <p className="font-mono text-sm font-semibold tabular-nums">
-              {formatMoney(a.balance, a.currency)}
-            </p>
-            <button
-              onClick={() => setConfirmDelete(a.id)}
-              className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </div>
-        );
-      })}
-
+    <div className="flex flex-col gap-5">
       {/* Botón agregar cuenta */}
       <button
         onClick={() => setShowForm(true)}
@@ -128,6 +102,76 @@ export function AccountList({
         <Plus className="h-5 w-5" />
         Agregar cuenta
       </button>
+
+      {accounts.length === 0 && !showForm && (
+        <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
+          <p className="text-sm text-muted-foreground">No tenés cuentas todavía. Creá la primera.</p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {accounts.map((a) => {
+          const Icon = TYPE_ICONS[a.type] ?? Banknote;
+          const totalIn = a.stats.income + a.stats.transferIn;
+          const totalOut = a.stats.expense + a.stats.transferOut;
+
+          return (
+            <div
+              key={a.id}
+              className="group relative flex flex-col rounded-2xl border border-border/50 bg-card/60 p-5 shadow-sm backdrop-blur-xl transition-all hover:-translate-y-1 hover:border-border hover:shadow-lg"
+            >
+              <Link href={`/dashboard/cuentas/${a.id}`} className="absolute inset-0 z-0 rounded-2xl" aria-label={`Ver cuenta ${a.name}`} />
+              
+              <div className="pointer-events-none relative z-10 mb-5 flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                    <Icon className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold leading-tight">{a.name}</h3>
+                    <p className="text-xs text-muted-foreground">
+                      {typeLabels[a.type] ?? a.type} · {a.currency}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setConfirmDelete(a.id);
+                  }}
+                  className="pointer-events-auto rounded-xl p-2 -mr-1 -mt-1 text-muted-foreground/40 transition hover:bg-destructive/10 hover:text-destructive"
+                  aria-label="Eliminar cuenta"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="pointer-events-none relative z-10 mb-4 flex flex-col gap-1">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Saldo Neto</p>
+                <p className="font-mono text-3xl font-bold tracking-tight tabular-nums">
+                  {formatMoney(a.balance, a.currency)}
+                </p>
+              </div>
+
+              <div className="pointer-events-none relative z-10 grid grid-cols-2 gap-2 rounded-xl bg-background/60 p-3 shadow-inner">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Ingresos</span>
+                  <span className="font-mono text-sm font-semibold text-primary">
+                    +{formatMoney(totalIn, a.currency)}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Egresos</span>
+                  <span className="font-mono text-sm font-semibold text-destructive">
+                    -{formatMoney(totalOut, a.currency)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
       {/* Modal crear cuenta */}
       <Modal open={showForm} onOpenChange={(o) => { if (!o) setShowForm(false) }} title="Nueva cuenta">

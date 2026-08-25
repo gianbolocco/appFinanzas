@@ -13,7 +13,8 @@ import { CategoryPieChart } from "./category-pie-chart";
 import { TrendsLineChart } from "./trends-line-chart";
 import { ParetoBarChart } from "./pareto-bar-chart";
 import { AccountBarChart } from "./account-bar-chart";
-import { PeriodPicker, resolvePeriod } from "./period-picker";
+import { PeriodPicker } from "./period-picker";
+import { resolvePeriod } from "@/lib/period";
 
 function pctChange(curr: number, prev: number) {
   if (prev === 0) return curr > 0 ? 100 : 0;

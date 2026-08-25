@@ -68,6 +68,8 @@ export default async function DashboardPage() {
     return acc;
   }, {});
 
+  const arsRate = rates.find((r) => r.base === "USD" && r.quote === "ARS");
+
   return (
     <div className="flex flex-col gap-6">
       <header className="flex items-center justify-between">
@@ -75,8 +77,16 @@ export default async function DashboardPage() {
           <p className="text-sm text-muted-foreground">Hola,</p>
           <h1 className="text-xl font-semibold lg:text-2xl">{profile.full_name ?? profile.email}</h1>
         </div>
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-          <span className="text-sm font-semibold">{initial}</span>
+        <div className="flex items-center gap-3">
+          {arsRate && (
+            <div className="flex items-center gap-1.5 rounded-full border border-border bg-card/50 px-3 py-1.5 text-xs shadow-sm backdrop-blur-md">
+              <span className="text-muted-foreground">USD/ARS</span>
+              <span className="font-mono font-medium tabular-nums">{formatMoney(arsRate.rate, "ARS")}</span>
+            </div>
+          )}
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <span className="text-sm font-semibold">{initial}</span>
+          </div>
         </div>
       </header>
 

@@ -45,7 +45,7 @@ export function Sidebar({
 
   return (
     <>
-      <aside className="hidden w-[260px] shrink-0 flex-col border-r border-border/50 glass-panel p-4 lg:flex shadow-xl shadow-black/5 z-20">
+      <aside className="hidden w-[260px] shrink-0 flex-col border-r border-border/50 glass-panel p-4 lg:fixed lg:inset-y-0 lg:left-0 lg:flex shadow-xl shadow-black/5 z-20">
         <div className="mb-8 flex items-center gap-3 px-2">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-premium text-primary-foreground shadow-lg shadow-primary/20">
             <span className="text-base font-bold">G</span>

@@ -110,42 +110,19 @@ export function CategoryList({ categories }: { categories: Category[] }) {
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      {/* Predefinidas */}
-      <section className="flex flex-col gap-2">
-        <h2 className="text-sm font-semibold text-muted-foreground">Predefinidas</h2>
-        <div className="flex flex-col gap-1.5">
-          {predefined.map((c) => {
-            return (
-              <div
-                key={c.id}
-                className="group flex items-center gap-3 rounded-2xl border border-border bg-card p-3.5 shadow-sm transition hover:shadow-md"
-              >
-                <div
-                  className="flex h-9 w-9 items-center justify-center rounded-full"
-                  style={{ backgroundColor: `color-mix(in oklch, ${c.color} 15%, transparent)` }}
-                >
-                  <CategoryIconRender name={c.icon ?? "circle-ellipsis"} className="h-4 w-4" color={c.color} />
-                </div>
-                <span className="flex-1 text-sm font-medium">{c.name}</span>
-                <span className="text-xs text-muted-foreground">{KIND_LABELS[c.kind]}</span>
-                <button
-                  onClick={() => openEdit(c)}
-                  className="rounded-lg p-1.5 text-muted-foreground opacity-0 transition hover:bg-accent hover:text-foreground group-hover:opacity-100"
-                  aria-label="Editar"
-                >
-                  <Pencil className="h-4 w-4" />
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      </section>
+    <div className="flex flex-col gap-6">
+      <button
+        onClick={openNew}
+        className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-card/50 text-sm font-medium text-muted-foreground transition hover:border-primary hover:text-primary"
+      >
+        <Plus className="h-5 w-5" />
+        Nueva categoría
+      </button>
 
       {/* Custom */}
       <section className="flex flex-col gap-2">
         <h2 className="text-sm font-semibold text-muted-foreground">Tus categorías</h2>
-        {custom.length > 0 && (
+        {custom.length > 0 ? (
           <div className="flex flex-col gap-1.5">
             {custom.map((c) => {
               return (
@@ -179,15 +156,42 @@ export function CategoryList({ categories }: { categories: Category[] }) {
               );
             })}
           </div>
+        ) : (
+          <div className="rounded-2xl border border-border bg-card/50 p-6 text-center shadow-sm">
+            <p className="text-sm text-muted-foreground">No tenés categorías personalizadas. ¡Creá una para organizar mejor tus gastos!</p>
+          </div>
         )}
+      </section>
 
-        <button
-          onClick={openNew}
-          className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-card/50 text-sm font-medium text-muted-foreground transition hover:border-primary hover:text-primary"
-        >
-          <Plus className="h-5 w-5" />
-          Nueva categoría
-        </button>
+      {/* Predefinidas */}
+      <section className="flex flex-col gap-2 mt-2">
+        <h2 className="text-sm font-semibold text-muted-foreground">Predefinidas</h2>
+        <div className="flex flex-col gap-1.5">
+          {predefined.map((c) => {
+            return (
+              <div
+                key={c.id}
+                className="group flex items-center gap-3 rounded-2xl border border-border bg-card p-3.5 shadow-sm transition hover:shadow-md"
+              >
+                <div
+                  className="flex h-9 w-9 items-center justify-center rounded-full"
+                  style={{ backgroundColor: `color-mix(in oklch, ${c.color} 15%, transparent)` }}
+                >
+                  <CategoryIconRender name={c.icon ?? "circle-ellipsis"} className="h-4 w-4" color={c.color} />
+                </div>
+                <span className="flex-1 text-sm font-medium">{c.name}</span>
+                <span className="text-xs text-muted-foreground">{KIND_LABELS[c.kind]}</span>
+                <button
+                  onClick={() => openEdit(c)}
+                  className="rounded-lg p-1.5 text-muted-foreground opacity-0 transition hover:bg-accent hover:text-foreground group-hover:opacity-100"
+                  aria-label="Editar"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
       </section>
 
       <Modal

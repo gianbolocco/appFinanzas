@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Target, RefreshCw, Landmark, Tags, Settings, X, type LucideIcon } from "lucide-react";
+import { Target, RefreshCw, Landmark, Tags, Settings, X, PieChart, type LucideIcon } from "lucide-react";
 
 const MORE_ITEMS: { href: string; icon: LucideIcon; label: string }[] = [
+  { href: "/dashboard/presupuestos", icon: PieChart, label: "Presupuestos" },
   { href: "/dashboard/metas", icon: Target, label: "Metas de ahorro" },
   { href: "/dashboard/suscripciones", icon: RefreshCw, label: "Suscripciones" },
   { href: "/dashboard/cuentas", icon: Landmark, label: "Cuentas" },
@@ -38,7 +39,7 @@ export function MoreSheet({ open, onClose }: { open: boolean; onClose: () => voi
             <X className="h-5 w-5" />
           </button>
         </header>
-        <nav className="flex flex-col p-3">
+        <nav className="grid grid-cols-2 gap-3 p-4">
           {MORE_ITEMS.map((item) => {
             const isActive = pathname.startsWith(item.href);
             return (
@@ -46,9 +47,11 @@ export function MoreSheet({ open, onClose }: { open: boolean; onClose: () => voi
                 key={item.href}
                 href={item.href}
                 onClick={onClose}
-                className={`flex items-center gap-3 rounded-xl px-3 py-3.5 text-sm font-medium transition ${isActive ? "bg-primary/10 text-primary" : "hover:bg-accent"}`}
+                className={`flex flex-col items-center justify-center gap-2.5 rounded-3xl p-5 text-center text-sm font-medium transition-all hover:scale-105 active:scale-95 ${isActive ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20" : "bg-card border border-border/50 hover:bg-accent shadow-sm"}`}
               >
-                <item.icon className="h-5 w-5" />
+                <div className={`flex h-10 w-10 items-center justify-center rounded-full ${isActive ? "bg-primary-foreground/20 text-primary-foreground" : "bg-primary/10 text-primary"}`}>
+                  <item.icon className="h-5 w-5" />
+                </div>
                 {item.label}
               </Link>
             );

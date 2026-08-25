@@ -19,6 +19,13 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Guita — tus finanzas, en claro",
   description: "Gestión de finanzas personales con carga desde Telegram y foto de tickets.",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Guita",
+  },
+  themeColor: "#10b981",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
