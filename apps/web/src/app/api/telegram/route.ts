@@ -94,11 +94,11 @@ export async function POST(req: Request) {
           amount: pendingTx.amount,
           currency: pendingTx.currency,
           date: pendingTx.date,
-          description: pendingTx.description,
+          note: pendingTx.description,
           category_id: pendingTx.category_id,
           account_id: pendingTx.account_id,
           source: "bot",
-          converted_amount: pendingTx.amount, // asumiendo 1:1 localmente
+          amount_base: pendingTx.amount, // asumiendo 1:1 localmente
           exchange_rate: 1,
         });
 
