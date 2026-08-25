@@ -3,13 +3,14 @@
 import { useState, useTransition } from "react";
 import { Plus, Trash2, Loader2, Banknote, Landmark, CreditCard, Smartphone, PiggyBank } from "lucide-react";
 
-import { createAccount, deleteAccount } from "@/lib/actions";
+import { createAccount, deleteAccount, setDefaultAccount } from "@/lib/actions";
 import { formatMoney } from "@/lib/format";
 import { Modal } from "@/components/modal";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { toast } from "sonner";
 
 import Link from "next/link";
+import { Star } from "lucide-react";
 
 type Account = {
   id: string;
@@ -17,6 +18,7 @@ type Account = {
   type: string;
   currency: string;
   balance: number;
+  is_default: boolean;
   stats: {
     income: number;
     expense: number;
@@ -92,6 +94,17 @@ export function AccountList({
     });
   }
 
+  function handleSetDefault(id: string) {
+    startTransition(async () => {
+      try {
+        await setDefaultAccount(id);
+        toast.success("Cuenta predeterminada actualizada");
+      } catch (err) {
+        toast.error("Error al actualizar la cuenta predeterminada");
+      }
+    });
+  }
+
   return (
     <div className="flex flex-col gap-5">
       {/* Botón agregar cuenta */}
@@ -134,18 +147,36 @@ export function AccountList({
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setConfirmDelete(a.id);
-                  }}
-                  className="pointer-events-auto rounded-xl p-2 -mr-1 -mt-1 text-muted-foreground/40 transition hover:bg-destructive/10 hover:text-destructive"
-                  aria-label="Eliminar cuenta"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
+                  <div className="flex flex-col gap-1">
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleSetDefault(a.id);
+                      }}
+                      className={`pointer-events-auto rounded-xl p-2 -mr-1 -mt-1 transition ${
+                        a.is_default
+                          ? "text-yellow-500 hover:text-yellow-600"
+                          : "text-muted-foreground/30 hover:text-yellow-500/80"
+                      }`}
+                      aria-label="Marcar como predeterminada"
+                      title="Marcar como predeterminada"
+                    >
+                      <Star className="h-4 w-4" fill={a.is_default ? "currentColor" : "none"} />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setConfirmDelete(a.id);
+                      }}
+                      className="pointer-events-auto rounded-xl p-2 -mr-1 text-muted-foreground/40 transition hover:bg-destructive/10 hover:text-destructive"
+                      aria-label="Eliminar cuenta"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
 
               <div className="pointer-events-none relative z-10 mb-4 flex flex-col gap-1">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Saldo Neto</p>

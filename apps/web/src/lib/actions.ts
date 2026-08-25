@@ -731,3 +731,25 @@ async function applyBalance(
     .update({ balance: acc.balance + delta })
     .eq("id", accountId);
 }
+
+export async function setDefaultAccount(accountId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  // Primero desmarcamos todas las de este usuario
+  await supabase
+    .from("accounts")
+    .update({ is_default: false })
+    .eq("user_id", user.id);
+
+  // Luego marcamos la seleccionada
+  const { error } = await supabase
+    .from("accounts")
+    .update({ is_default: true })
+    .eq("id", accountId)
+    .eq("user_id", user.id);
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/dashboard/cuentas");
+}
