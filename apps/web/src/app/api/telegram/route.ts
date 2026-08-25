@@ -42,6 +42,7 @@ const TransactionExtraction = z.object({
 });
 
 export async function POST(req: Request) {
+  let update: any = {};
   try {
     const secretToken = req.headers.get("x-telegram-bot-api-secret-token");
     if (secretToken && secretToken !== process.env.TELEGRAM_WEBHOOK_SECRET) {
@@ -52,7 +53,7 @@ export async function POST(req: Request) {
     try {
       parsedUpdate = await req.json();
     } catch(e) {}
-    const update = parsedUpdate || {};
+    update = parsedUpdate || {};
 
     // ----------------------------------------------------------------------
     // Manejo de botones interactivos (Callback Queries)
