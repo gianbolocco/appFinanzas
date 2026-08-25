@@ -185,7 +185,7 @@ export async function POST(req: Request) {
     if (process.env.ANTHROPIC_API_KEY) {
       aiModel = anthropic("claude-3-5-sonnet-latest");
     } else if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-      aiModel = google("gemini-2.5-flash");
+      aiModel = google("gemini-3.6-flash");
     } else {
       await sendTelegramMessage(chatId, "❌ Falta configurar una clave de IA en el servidor.");
       return new Response("OK");
