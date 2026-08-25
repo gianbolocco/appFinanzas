@@ -259,15 +259,16 @@ export async function POST(req: Request) {
       }
     }
 
-    const promptMessages: any[] = [
-      { role: "system", content: `Sos un asistente inteligente de finanzas personales, amable y con buena onda.
+    const systemPrompt = `Sos un asistente inteligente de finanzas personales, amable y con buena onda.
       Tu tarea es extraer la información del texto o archivo del usuario y mapearla a una transacción o transferencia.
       Si el usuario solo está saludando o haciendo una pregunta general, pone is_transaction en false y responde amigablemente en reply_message.
       La moneda base del usuario es ${userProfile.base_currency}. 
       Las categorías disponibles son: ${categoryNames}. 
       Las cuentas disponibles son: ${accountNames}.
       Elegí la categoría y la cuenta que más se acerquen al texto. Devolvé sus nombres exactos. Si no menciona una cuenta, asumí que usa la cuenta predeterminada de la lista.
-      La fecha de hoy es ${new Date().toISOString().split("T")[0]}.` },
+      La fecha de hoy es ${new Date().toISOString().split("T")[0]}.`;
+
+    const userMessages: any[] = [
       { role: "user", content: [
         { type: "text", text: text || "Analizá el archivo adjunto para extraer el gasto o ingreso." },
         ...fileParts
@@ -277,7 +278,8 @@ export async function POST(req: Request) {
     const { object: extraction } = await generateObject({
       model: aiModel,
       schema: TransactionExtraction,
-      messages: promptMessages,
+      system: systemPrompt,
+      messages: userMessages,
     });
 
     if (!extraction) {
