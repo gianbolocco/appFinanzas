@@ -108,6 +108,7 @@ export type GoalForm = z.infer<typeof goalFormSchema>;
 
 export const contributionFormSchema = z.object({
   amount: z.number().positive("El aporte tiene que ser positivo"),
+  account_id: z.string().uuid("Elegí de qué cuenta sale"),
   note: z.string().max(200).optional(),
 });
 
@@ -128,3 +129,13 @@ export const subscriptionFormSchema = z.object({
 });
 
 export type SubscriptionForm = z.infer<typeof subscriptionFormSchema>;
+
+// ----------------------------------------------------------------------------
+// Perfil
+// ----------------------------------------------------------------------------
+export const profileFormSchema = z.object({
+  full_name: z.string().min(1, "Poné tu nombre").max(80),
+  base_currency: z.string().min(3).max(3),
+});
+
+export type ProfileForm = z.infer<typeof profileFormSchema>;

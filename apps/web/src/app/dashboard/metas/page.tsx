@@ -1,11 +1,11 @@
-import { getGoals } from "@/lib/queries";
+import { getGoals, getAccounts } from "@/lib/queries";
 import { getCurrentUser } from "@/lib/dal";
 import { formatMoney } from "@/lib/format";
 import { GoalList } from "./goal-list";
 
 export default async function MetasPage() {
   const { profile } = await getCurrentUser();
-  const goals = await getGoals();
+  const [goals, accounts] = await Promise.all([getGoals(), getAccounts()]);
   const active = goals.filter((g) => !g.archived);
   const archived = goals.filter((g) => g.archived);
 
@@ -41,7 +41,11 @@ export default async function MetasPage() {
         </div>
       </section>
 
-      <GoalList goals={goals} baseCurrency={profile.base_currency} />
+      <GoalList
+        goals={goals}
+        accounts={accounts.map((a) => ({ id: a.id, name: a.name, currency: a.currency }))}
+        baseCurrency={profile.base_currency}
+      />
     </div>
   );
 }

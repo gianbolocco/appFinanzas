@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 import { getCurrentUser } from "@/lib/dal";
-import { getAccounts, getTransactions, getMonthlySummary, getSubscriptions } from "@/lib/queries";
+import { getAccounts, getTransactions, getMonthlySummary, getSubscriptions, getTotalBalance, getRates } from "@/lib/queries";
 import { formatMoney, formatSigned, formatShortDate } from "@/lib/format";
 import { getCategoryIcon } from "@/lib/category-icons";
 import { DashboardChart } from "@/components/dashboard-chart";
@@ -45,16 +45,21 @@ export default async function DashboardPage() {
     redirect("/onboarding");
   }
 
-  const [accounts, transactions, summary, subscriptions] = await Promise.all([
+  const [accounts, transactions, summary, subscriptions, rates] = await Promise.all([
     getAccounts(),
     getTransactions({ limit: 5 }),
     getMonthlySummary(),
     getSubscriptions(),
+    getRates(),
   ]);
 
   const dueSubscriptions = subscriptions.filter((s) => s.active && s.daysUntil <= 3);
-
   const baseCurrency = profile.base_currency;
+  const { total: totalBalance, partial } = getTotalBalance(
+    accounts.map((a) => ({ balance: a.balance, currency: a.currency })),
+    baseCurrency,
+    rates,
+  );
   const initial = (profile.full_name ?? profile.email ?? "?").charAt(0).toUpperCase();
 
   // Agrupar cuentas por moneda para los netos individuales
@@ -80,18 +85,29 @@ export default async function DashboardPage() {
         <div className="absolute inset-0 bg-gradient-to-br from-zinc-800/20 via-transparent to-transparent"></div>
         
         <div className="relative z-10">
-          <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400">Patrimonio Neto</p>
-          <div className="mt-6 flex flex-col gap-5">
+          <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400">Patrimonio Neto Total</p>
+          <div className="mt-2 mb-6">
+            <p className="font-mono text-4xl font-semibold tracking-tight tabular-nums sm:text-5xl">
+              {formatMoney(totalBalance, baseCurrency)}
+            </p>
+            {partial && (
+              <p className="mt-2 text-xs text-amber-500/80 font-medium">
+                Faltan cotizaciones: total incompleto.
+              </p>
+            )}
+          </div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-zinc-500 mb-4">Desglose por moneda</p>
+          <div className="flex flex-col gap-5">
             {Object.keys(byCurrency).length > 0 ? (
               Object.entries(byCurrency).map(([cur, bal], i, arr) => (
                 <div key={cur} className={`flex items-end justify-between ${i !== arr.length - 1 ? "border-b border-zinc-800/50 pb-5" : ""}`}>
                   <div className="flex flex-col gap-1">
                     <p className="text-sm font-medium text-zinc-400">Total en {cur}</p>
-                    <p className="font-mono text-3xl font-semibold tracking-tight tabular-nums sm:text-4xl">
+                    <p className="font-mono text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl">
                       {formatMoney(bal, cur)}
                     </p>
                   </div>
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-zinc-800/50 text-zinc-300 shadow-inner">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800/50 text-zinc-300 shadow-inner">
                     <span className="text-[10px] font-bold">{cur}</span>
                   </div>
                 </div>
@@ -100,11 +116,11 @@ export default async function DashboardPage() {
               <div className="flex items-end justify-between">
                 <div className="flex flex-col gap-1">
                   <p className="text-sm font-medium text-zinc-400">Total en {baseCurrency}</p>
-                  <p className="font-mono text-3xl font-semibold tracking-tight tabular-nums sm:text-4xl">
+                  <p className="font-mono text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl">
                     {formatMoney(0, baseCurrency)}
                   </p>
                 </div>
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-zinc-800/50 text-zinc-300 shadow-inner">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-800/50 text-zinc-300 shadow-inner">
                   <span className="text-[10px] font-bold">{baseCurrency}</span>
                 </div>
               </div>
@@ -199,6 +215,11 @@ export default async function DashboardPage() {
             <p className="mt-1.5 font-mono text-lg font-semibold tabular-nums">
               {formatMoney(summary.income - summary.expense, baseCurrency)}
             </p>
+            {summary.savings > 0 && (
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {formatMoney(summary.savings, baseCurrency)} a metas
+              </p>
+            )}
           </div>
           <div className="hidden rounded-2xl glass p-4 transition-all hover:shadow-md lg:block">
             <p className="text-xs font-medium text-muted-foreground">Cuentas</p>

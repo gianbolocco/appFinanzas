@@ -242,11 +242,17 @@ export function SubscriptionList({
         <div className="mt-3 flex flex-wrap gap-2">
           {s.active && (
             <button
-              onClick={() => { if (!pending) handlePayment(s.id) }}
-              className={`flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground transition hover:opacity-90 ${pending ? "opacity-50 pointer-events-none" : ""}`}
+              onClick={() => { if (!pending && s.account_id) handlePayment(s.id) }}
+              title={!s.account_id ? "Asignale una cuenta primero" : undefined}
+              className={`flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground transition hover:opacity-90 ${(pending || !s.account_id) ? "opacity-50 pointer-events-none" : ""}`}
             >
               <CheckCircle2 className="h-3.5 w-3.5" /> Registrar pago
             </button>
+          )}
+          {s.active && !s.account_id && (
+            <span className="self-center text-xs text-muted-foreground">
+              Sin cuenta asignada
+            </span>
           )}
           <button
             onClick={() => { if (!pending) handleToggle(s.id, s.active) }}

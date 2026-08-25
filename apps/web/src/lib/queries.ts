@@ -2,6 +2,9 @@ import "server-only";
 
 import { createClient } from "@/lib/supabase-server";
 import { getCurrentUser } from "@/lib/dal";
+import { monthStartLocal } from "@/lib/dates";
+import type { Rate } from "@/lib/money";
+import { sumInBase } from "@/lib/money";
 
 // ----------------------------------------------------------------------------
 // Cuentas
@@ -16,10 +19,35 @@ export async function getAccounts() {
   return data;
 }
 
-export function getTotalBalance(accounts: { balance: number; currency: string }[]) {
-  if (accounts.length === 0) return 0;
-  // Por ahora suma simple asumiendo misma moneda; la conversión se hace en Fase 2 multi-moneda
-  return accounts.reduce((sum, a) => sum + a.balance, 0);
+/** Cotizaciones más recientes disponibles, una por par base/quote. */
+export async function getRates(): Promise<Rate[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("exchange_rates")
+    .select("base, quote, rate, date")
+    .order("date", { ascending: false })
+    .limit(200);
+  if (error) throw error;
+
+  const latest = new Map<string, Rate>();
+  for (const r of data ?? []) {
+    const key = `${r.base}:${r.quote}`;
+    if (!latest.has(key)) latest.set(key, { base: r.base, quote: r.quote, rate: r.rate });
+  }
+  return [...latest.values()];
+}
+
+/**
+ * Suma los saldos convirtiendo a la moneda base.
+ * `partial: true` significa que faltó al menos un rate y el total está incompleto:
+ * la UI debe decirlo en vez de mostrar un número que no significa nada.
+ */
+export function getTotalBalance(
+  accounts: { balance: number; currency: string }[],
+  baseCurrency: string,
+  rates: Rate[],
+): { total: number; partial: boolean } {
+  return sumInBase(accounts, baseCurrency, rates);
 }
 
 // ----------------------------------------------------------------------------
@@ -49,38 +77,38 @@ export async function getAccountById(accountId: string) {
 
 export async function getAccountMonthlyStats(accountId: string) {
   const supabase = await createClient();
-  const now = new Date();
-  const from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+  const from = monthStartLocal();
 
-  const { data, error } = await supabase
+  // Movimientos donde esta cuenta es el origen
+  const { data: outgoing, error } = await supabase
     .from("transactions")
-    .select("type, amount, currency, account_id, to_account_id")
+    .select("type, amount")
     .eq("account_id", accountId)
+    .eq("is_installment_parent", false)
     .gte("date", from);
 
   if (error) throw error;
 
   let income = 0;
   let expense = 0;
-  let transferIn = 0;
   let transferOut = 0;
 
-  for (const t of data ?? []) {
+  for (const t of outgoing ?? []) {
     if (t.type === "income") income += t.amount;
     else if (t.type === "expense") expense += t.amount;
     else if (t.type === "transfer") transferOut += t.amount;
   }
 
-  // Transferencias entrantes (donde esta cuenta es el destino)
+  // Transferencias entrantes: dest_amount ya está en la moneda de esta cuenta.
+  // No se multiplica por exchange_rate (ese rate convierte a moneda base).
   const { data: incoming } = await supabase
     .from("transactions")
-    .select("amount, currency, exchange_rate")
+    .select("amount, dest_amount")
     .eq("to_account_id", accountId)
+    .eq("type", "transfer")
     .gte("date", from);
 
-  for (const t of incoming ?? []) {
-    transferIn += t.amount * (t.exchange_rate ?? 1);
-  }
+  const transferIn = (incoming ?? []).reduce((s, t) => s + (t.dest_amount ?? t.amount), 0);
 
   return { income, expense, transferIn, transferOut };
 }
@@ -94,27 +122,28 @@ export async function getAccountBalanceAtDate(accountId: string, date: string) {
     .single();
   if (!account) return 0;
 
-  // Sumar transacciones después de esa fecha para restarlas del saldo actual
-  const { data: txs } = await supabase
+  // Deshacer los movimientos posteriores a `date` para retroceder el saldo.
+  const { data: outgoing } = await supabase
     .from("transactions")
-    .select("type, amount, exchange_rate")
+    .select("type, amount")
     .eq("account_id", accountId)
+    .eq("is_installment_parent", false)
     .gt("date", date);
 
   const { data: incoming } = await supabase
     .from("transactions")
-    .select("amount, exchange_rate")
+    .select("amount, dest_amount")
     .eq("to_account_id", accountId)
+    .eq("type", "transfer")
     .gt("date", date);
 
   let delta = 0;
-  for (const t of txs ?? []) {
+  for (const t of outgoing ?? []) {
     if (t.type === "income") delta -= t.amount;
-    else if (t.type === "expense") delta += t.amount;
-    else if (t.type === "transfer") delta += t.amount;
+    else delta += t.amount; // expense y transfer salieron de esta cuenta
   }
   for (const t of incoming ?? []) {
-    delta -= t.amount * (t.exchange_rate ?? 1);
+    delta -= t.dest_amount ?? t.amount;
   }
 
   return account.balance + delta;
@@ -127,6 +156,7 @@ export async function getAccountTransactions(accountId: string) {
     .select(
       "*, category:categories(*), account:accounts!transactions_account_id_fkey(*), to_account:accounts!transactions_to_account_id_fkey(*)",
     )
+    .eq("is_installment_parent", false)
     .or(`account_id.eq.${accountId},to_account_id.eq.${accountId}`)
     .order("date", { ascending: false })
     .order("created_at", { ascending: false });
@@ -152,6 +182,7 @@ export async function getBudgets() {
   const { data: expenses } = await supabase
     .from("transactions")
     .select("category_id, amount, amount_base")
+    .eq("is_installment_parent", false)
     .eq("type", "expense")
     .gte("date", from);
 
@@ -280,7 +311,9 @@ export async function getCategoryBreakdown(opts?: { from?: string; to?: string }
   let q = supabase
     .from("transactions")
     .select("amount, amount_base, currency, category:categories(id, name, color, icon)")
-    .eq("type", "expense");
+    .eq("type", "expense")
+    .eq("is_installment_parent", false)
+    .is("goal_id", null);
 
   if (opts?.from) q = q.gte("date", opts.from);
   if (opts?.to) q = q.lte("date", opts.to);
@@ -322,6 +355,8 @@ export async function getMonthlyTrends() {
       const { data } = await supabase
         .from("transactions")
         .select("type, amount")
+        .eq("is_installment_parent", false)
+        .in("type", ["income", "expense"])
         .gte("date", m.from)
         .lte("date", m.to);
       let income = 0;
@@ -347,8 +382,19 @@ export async function getMonthComparison() {
   const prevTo = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().slice(0, 10);
 
   const [currRes, prevRes] = await Promise.all([
-    supabase.from("transactions").select("type, amount").gte("date", thisFrom),
-    supabase.from("transactions").select("type, amount").gte("date", prevFrom).lte("date", prevTo),
+    supabase
+      .from("transactions")
+      .select("type, amount")
+      .eq("is_installment_parent", false)
+      .in("type", ["income", "expense"])
+      .gte("date", thisFrom),
+    supabase
+      .from("transactions")
+      .select("type, amount")
+      .eq("is_installment_parent", false)
+      .in("type", ["income", "expense"])
+      .gte("date", prevFrom)
+      .lte("date", prevTo),
   ]);
 
   function sum(data: { type: string; amount: number }[]) {
@@ -373,6 +419,7 @@ export async function getBreakdownByAccount(opts?: { from?: string; to?: string 
   let q = supabase
     .from("transactions")
     .select("amount, type, account:accounts!transactions_account_id_fkey(id, name, type)")
+    .eq("is_installment_parent", false)
     .in("type", ["expense", "income"]);
 
   if (opts?.from) q = q.gte("date", opts.from);
@@ -409,6 +456,7 @@ export async function getTransactions(opts?: {
     .select(
       "*, category:categories(*), account:accounts!transactions_account_id_fkey(*), to_account:accounts!transactions_to_account_id_fkey(*)",
     )
+    .eq("is_installment_parent", false)
     .order("date", { ascending: false })
     .order("created_at", { ascending: false });
 
@@ -427,23 +475,27 @@ export async function getTransactions(opts?: {
 
 export async function getMonthlySummary() {
   const { profile } = await getCurrentUser();
-  const now = new Date();
-  const from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+  const from = monthStartLocal();
   const supabase = await createClient();
 
   const { data, error } = await supabase
     .from("transactions")
-    .select("type, amount, amount_base")
+    .select("type, amount, amount_base, goal_id")
+    .in("type", ["income", "expense"])
+    .eq("is_installment_parent", false)
     .gte("date", from);
 
   if (error) throw error;
 
-  const summary = { income: 0, expense: 0, incomeBase: 0, expenseBase: 0 };
+  const summary = { income: 0, expense: 0, savings: 0, incomeBase: 0, expenseBase: 0 };
   for (const t of data ?? []) {
     if (t.type === "income") {
       summary.income += t.amount;
       summary.incomeBase += t.amount_base;
-    } else if (t.type === "expense") {
+    } else if (t.goal_id) {
+      // Aporte a una meta: salió de la cuenta, pero no se consumió.
+      summary.savings += t.amount;
+    } else {
       summary.expense += t.amount;
       summary.expenseBase += t.amount_base;
     }

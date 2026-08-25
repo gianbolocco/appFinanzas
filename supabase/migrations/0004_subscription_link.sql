@@ -2,7 +2,7 @@
 -- Guita — Migración 0004: vincular transacciones con suscripciones
 -- ============================================================================
 
--- Agregar subscription_id a transactions para追踪ar pagos de suscripciones
+-- Agregar subscription_id a transactions para rastrear pagos de suscripciones
 alter table public.transactions
   add column if not exists subscription_id uuid references public.subscriptions(id) on delete set null;
 

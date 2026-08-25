@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { Search, Filter, X, Pencil, ArrowDownLeft, ArrowUpRight, ArrowRightLeft } from "lucide-react";
 
-import { formatSigned, formatShortDate } from "@/lib/format";
+import { formatSigned, formatShortDate, formatMoney } from "@/lib/format";
 import { getCategoryIcon } from "@/lib/category-icons";
 import { TransactionSheet } from "@/components/transaction-sheet";
 
@@ -11,6 +11,7 @@ type Tx = {
   id: string;
   type: string;
   amount: number;
+  dest_amount: number | null;
   currency: string;
   note: string | null;
   date: string;
@@ -45,6 +46,7 @@ const TYPE_LABELS: Record<string, string> = {
 export function AccountTransactionList({
   transactions,
   accountId,
+  accountCurrency,
   accounts,
   categories,
   baseCurrency,
@@ -79,7 +81,7 @@ export function AccountTransactionList({
   const hasFilters = typeFilter || catFilter || search;
   const incomeTotal = filtered
     .filter((t) => t.type === "income" || (t.type === "transfer" && t.to_account_id === accountId))
-    .reduce((s, t) => s + t.amount, 0);
+    .reduce((s, t) => s + (t.type === "transfer" ? (t.dest_amount ?? t.amount) : t.amount), 0);
   const expenseTotal = filtered
     .filter((t) => t.type === "expense" || (t.type === "transfer" && t.account_id === accountId))
     .reduce((s, t) => s + t.amount, 0);
@@ -108,13 +110,13 @@ export function AccountTransactionList({
           <div className="rounded-xl bg-primary/5 px-3 py-2">
             <p className="text-xs text-muted-foreground">Entradas</p>
             <p className="font-mono text-sm font-semibold text-primary tabular-nums">
-              +{incomeTotal.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+              +{formatMoney(incomeTotal, accountCurrency ?? "ARS")}
             </p>
           </div>
           <div className="rounded-xl bg-muted px-3 py-2">
             <p className="text-xs text-muted-foreground">Salidas</p>
             <p className="font-mono text-sm font-semibold tabular-nums">
-              −{expenseTotal.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+              −{formatMoney(expenseTotal, accountCurrency ?? "ARS")}
             </p>
           </div>
         </div>
@@ -186,7 +188,9 @@ export function AccountTransactionList({
         <div className="flex flex-col gap-1.5">
           {filtered.map((t) => {
             const isIncoming = t.type === "income" || (t.type === "transfer" && t.to_account_id === accountId);
-            const signed = isIncoming ? t.amount : -t.amount;
+            // En una transferencia entrante se acreditó dest_amount, no amount.
+            const shown = isIncoming && t.type === "transfer" ? (t.dest_amount ?? t.amount) : t.amount;
+            const signed = isIncoming ? shown : -shown;
             const isInstallment = t.installment_number && t.installments_total;
             const Icon = getCategoryIcon(t.category?.icon ?? null);
             const catColor = t.category?.color ?? "oklch(0.556 0 0)";

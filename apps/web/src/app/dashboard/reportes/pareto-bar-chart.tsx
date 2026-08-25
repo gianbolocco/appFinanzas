@@ -44,7 +44,15 @@ export function ParetoBarChart({ data }: { data: Datum[] }) {
         />
         <Tooltip
           formatter={(value) => Number(value).toLocaleString("es-AR", { minimumFractionDigits: 2 })}
-          contentStyle={{ borderRadius: 12, border: "1px solid var(--border)", fontSize: 12 }}
+          contentStyle={{
+            borderRadius: 12,
+            border: "1px solid var(--border)",
+            backgroundColor: "var(--card)",
+            color: "var(--card-foreground)",
+            fontSize: 12,
+          }}
+          itemStyle={{ color: "var(--card-foreground)" }}
+          labelStyle={{ color: "var(--muted-foreground)" }}
         />
         <Bar dataKey="total" radius={[0, 6, 6, 0]}>
           {withPct.map((entry, i) => (
