@@ -1,9 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
-import OpenAI from "openai";
 import { z } from "zod";
-import { zodResponseFormat } from "openai/helpers/zod";
-
-const openai = new OpenAI();
+import { generateObject } from "ai";
+import { google } from "@ai-sdk/google";
+import { anthropic } from "@ai-sdk/anthropic";
 
 // Admin client to bypass RLS since requests come from Telegram
 const supabaseAdmin = createClient(
@@ -94,7 +93,7 @@ export async function POST(req: Request) {
     const userId = link.user_id;
 
     // Notificar que estamos procesando
-    await sendTelegramMessage(chatId, "✍️ Procesando gasto...");
+    await sendTelegramMessage(chatId, "✍️ Procesando movimiento...");
 
     // Cargar datos del usuario para el contexto de la IA
     const [{ data: userProfile }, { data: categories }, { data: accounts }] = await Promise.all([
@@ -109,29 +108,33 @@ export async function POST(req: Request) {
     }
 
     const categoryNames = categories.map(c => c.name).join(", ");
-    const defaultAccount = accounts[0]; // Usar la primera cuenta por defecto
+    const defaultAccount = accounts[0];
 
-    // Llamar a OpenAI
-    const completion = await openai.beta.chat.completions.parse({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: `Sos un asistente inteligente de finanzas personales. Tu tarea es extraer la información del texto del usuario y mapearla a una transacción.
-          La moneda base del usuario es ${userProfile.base_currency}. 
-          Las categorías disponibles son: ${categoryNames}. 
-          Elegí la categoría que más se acerque, y devolvé su nombre exacto.
-          La fecha de hoy es ${new Date().toISOString().split("T")[0]}.`,
-        },
-        { role: "user", content: text },
-      ],
-      response_format: zodResponseFormat(TransactionExtraction, "transaction"),
+    // Elegir el modelo de IA según la API KEY que esté disponible en Vercel
+    let aiModel;
+    if (process.env.ANTHROPIC_API_KEY) {
+      aiModel = anthropic("claude-3-5-sonnet-latest");
+    } else if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+      aiModel = google("gemini-1.5-flash"); // Flash es súper rápido e ideal para esto
+    } else {
+      await sendTelegramMessage(chatId, "❌ Falta configurar una clave de IA (Anthropic o Google) en el servidor.");
+      return new Response("OK");
+    }
+
+    // Llamar a la IA genérica
+    const { object: extraction } = await generateObject({
+      model: aiModel,
+      schema: TransactionExtraction,
+      system: `Sos un asistente inteligente de finanzas personales. Tu tarea es extraer la información del texto del usuario y mapearla a una transacción.
+      La moneda base del usuario es ${userProfile.base_currency}. 
+      Las categorías disponibles son: ${categoryNames}. 
+      Elegí la categoría que más se acerque, y devolvé su nombre exacto.
+      La fecha de hoy es ${new Date().toISOString().split("T")[0]}.`,
+      prompt: text,
     });
 
-    const extraction = completion.choices[0].message.parsed;
-
     if (!extraction) {
-      await sendTelegramMessage(chatId, "❌ No pude entender el gasto. Intentá ser más específico.");
+      await sendTelegramMessage(chatId, "❌ No pude entender el movimiento. Intentá ser más específico.");
       return new Response("OK");
     }
 
@@ -152,7 +155,7 @@ export async function POST(req: Request) {
       category_id: categoryId,
       account_id: defaultAccount.id,
       source: "bot",
-      converted_amount: extraction.amount, // Asume 1:1 con la moneda de la cuenta por ahora
+      converted_amount: extraction.amount,
       exchange_rate: 1,
     });
 
