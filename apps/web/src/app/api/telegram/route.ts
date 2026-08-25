@@ -24,6 +24,7 @@ const TransactionExtraction = z.object({
   amount: z.number().describe("El monto numérico del movimiento"),
   type: z.enum(["expense", "income"]).describe("Tipo de movimiento"),
   category_name: z.string().describe("El nombre exacto de la categoría elegida de la lista proporcionada, o 'Varios' si no aplica ninguna"),
+  account_name: z.string().describe("El nombre exacto de la cuenta elegida de la lista proporcionada"),
   description: z.string().describe("Concepto breve del movimiento"),
   date: z.string().describe("Fecha en formato YYYY-MM-DD"),
 });
@@ -108,7 +109,7 @@ export async function POST(req: Request) {
     }
 
     const categoryNames = categories.map(c => c.name).join(", ");
-    const defaultAccount = accounts[0];
+    const accountNames = accounts.map(a => a.name).join(", ");
 
     // Elegir el modelo de IA según la API KEY que esté disponible en Vercel
     let aiModel;
@@ -128,7 +129,8 @@ export async function POST(req: Request) {
       system: `Sos un asistente inteligente de finanzas personales. Tu tarea es extraer la información del texto del usuario y mapearla a una transacción.
       La moneda base del usuario es ${userProfile.base_currency}. 
       Las categorías disponibles son: ${categoryNames}. 
-      Elegí la categoría que más se acerque, y devolvé su nombre exacto.
+      Las cuentas disponibles son: ${accountNames}.
+      Elegí la categoría y la cuenta que más se acerquen al texto, y devolvé sus nombres exactos. Si el usuario no menciona la cuenta, usá la primera de la lista.
       La fecha de hoy es ${new Date().toISOString().split("T")[0]}.`,
       prompt: text,
     });
@@ -144,6 +146,12 @@ export async function POST(req: Request) {
       categoryId = categories[0].id; // Fallback
     }
 
+    // Buscar el ID de la cuenta extraída
+    let accountObj = accounts.find(a => a.name.toLowerCase() === extraction.account_name.toLowerCase());
+    if (!accountObj) {
+      accountObj = accounts[0]; // Fallback
+    }
+
     // Insertar la transacción
     const { error: txError } = await supabaseAdmin.from("transactions").insert({
       user_id: userId,
@@ -153,7 +161,7 @@ export async function POST(req: Request) {
       date: extraction.date,
       description: extraction.description,
       category_id: categoryId,
-      account_id: defaultAccount.id,
+      account_id: accountObj.id,
       source: "bot",
       converted_amount: extraction.amount,
       exchange_rate: 1,
@@ -164,7 +172,7 @@ export async function POST(req: Request) {
       await sendTelegramMessage(chatId, "❌ Hubo un error al guardar el gasto en la base de datos.");
     } else {
       const typeStr = extraction.type === "expense" ? "Gasto" : "Ingreso";
-      await sendTelegramMessage(chatId, `✅ ${typeStr} guardado!\nMonto: $${extraction.amount}\nCategoría: ${extraction.category_name}\nConcepto: ${extraction.description}`);
+      await sendTelegramMessage(chatId, `✅ ${typeStr} guardado!\nMonto: $${extraction.amount}\nCategoría: ${extraction.category_name}\nCuenta: ${accountObj.name}\nConcepto: ${extraction.description}`);
     }
 
     return new Response("OK");
