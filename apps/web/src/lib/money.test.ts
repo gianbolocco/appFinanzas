@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { convert, sumInBase, splitInstallments, installmentDates, dueThrough, type Rate } from "./money";
+import {
+  convert,
+  sumInBase,
+  splitInstallments,
+  installmentDates,
+  dueThrough,
+  destRateFromQuote,
+  type Rate,
+} from "./money";
 
 const rates: Rate[] = [
   { base: "USD", quote: "ARS", rate: 1200 },
@@ -93,5 +101,25 @@ describe("dueThrough", () => {
 
   it("es cero si la primera cuota todavia no vencio", () => {
     expect(dueThrough(["2026-09-01"], "2026-08-24")).toBe(0);
+  });
+});
+
+describe("destRateFromQuote", () => {
+  const USD_ARS = 1450;
+
+  it("usa la cotización tal cual cuando el origen es la referencia", () => {
+    // 100 USD -> ARS
+    expect(destRateFromQuote("USD", "USD", USD_ARS)).toBe(1450);
+    expect(100 * destRateFromQuote("USD", "USD", USD_ARS)).toBe(145_000);
+  });
+
+  it("la invierte cuando el origen es la otra moneda", () => {
+    // 145.000 ARS -> USD, con la misma cotización del dólar
+    expect(145_000 * destRateFromQuote("ARS", "USD", USD_ARS)).toBeCloseTo(100, 6);
+  });
+
+  it("no convierte con una cotización vacía o negativa", () => {
+    expect(destRateFromQuote("ARS", "USD", 0)).toBe(0);
+    expect(destRateFromQuote("ARS", "USD", -5)).toBe(0);
   });
 });

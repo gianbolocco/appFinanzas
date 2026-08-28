@@ -1,14 +1,14 @@
 const formatterCache = new Map<string, Intl.NumberFormat>();
 
-function getFormatter(currency: string, locale = "es-AR") {
-  const key = `${locale}:${currency}`;
+function getFormatter(currency: string, locale = "es-AR", digits = 2) {
+  const key = `${locale}:${currency}:${digits}`;
   let f = formatterCache.get(key);
   if (!f) {
     f = new Intl.NumberFormat(locale, {
       style: "currency",
       currency,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
     });
     formatterCache.set(key, f);
   }
@@ -17,6 +17,24 @@ function getFormatter(currency: string, locale = "es-AR") {
 
 export function formatMoney(amount: number, currency = "ARS", locale = "es-AR") {
   return getFormatter(currency, locale).format(amount);
+}
+
+/**
+ * Sin centavos. Para KPIs y totales: los decimales solo agregan ruido y ancho,
+ * y en mobile son la diferencia entre que el monto entre o se corte.
+ */
+export function formatMoneyRound(amount: number, currency = "ARS", locale = "es-AR") {
+  return getFormatter(currency, locale, 0).format(amount);
+}
+
+const compactFormatter = new Intl.NumberFormat("es-AR", {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+
+/** Para ejes de gráficos: 80 mil, 1,2 M. */
+export function formatCompact(amount: number) {
+  return compactFormatter.format(amount);
 }
 
 export function formatSigned(amount: number, currency = "ARS", locale = "es-AR") {

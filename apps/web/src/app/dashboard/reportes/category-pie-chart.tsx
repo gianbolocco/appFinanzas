@@ -7,7 +7,7 @@ type Datum = { name: string; total: number; color: string };
 export function CategoryPieChart({ data }: { data: Datum[] }) {
   if (data.length === 0) {
     return (
-      <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
+      <div className="text-muted-foreground flex h-64 items-center justify-center text-sm">
         Sin datos para mostrar
       </div>
     );

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase-server";
+import { fetchRate } from "@/lib/rates";
 import {
   accountFormSchema,
   categoryFormSchema,
@@ -136,7 +137,10 @@ export async function createTransaction(formData: FormData) {
     .single();
 
   const baseCurrency = profile?.base_currency ?? "ARS";
-  const rate = parsed.currency === baseCurrency ? 1 : await fetchRate(supabase, parsed.currency, baseCurrency, parsed.date);
+  const rate =
+    parsed.currency === baseCurrency
+      ? 1
+      : await fetchRate(supabase, parsed.currency, baseCurrency, parsed.date);
   const amountBase = parsed.amount * rate;
 
   const installments = parsed.installments_total && parsed.installments_total > 1;
@@ -328,15 +332,26 @@ export async function updateTransaction(transactionId: string, formData: FormDat
   if (origErr || !original) throw new Error("Transacción no encontrada");
   if (original.parent_transaction_id) throw new Error("No se pueden editar cuotas individuales");
 
-  const { data: profile } = await supabase.from("users").select("base_currency").eq("id", user.id).single();
+  const { data: profile } = await supabase
+    .from("users")
+    .select("base_currency")
+    .eq("id", user.id)
+    .single();
   const baseCurrency = profile?.base_currency ?? "ARS";
-  const rate = parsed.currency === baseCurrency ? 1 : await fetchRate(supabase, parsed.currency, baseCurrency, parsed.date);
+  const rate =
+    parsed.currency === baseCurrency
+      ? 1
+      : await fetchRate(supabase, parsed.currency, baseCurrency, parsed.date);
   const amountBase = parsed.amount * rate;
 
   // 1. Revertir el efecto de la transacción original sobre los saldos
   if (original.type === "transfer") {
     await applyBalance(supabase, original.account_id, original.amount);
-    await applyBalance(supabase, original.to_account_id, -(original.dest_amount ?? original.amount));
+    await applyBalance(
+      supabase,
+      original.to_account_id,
+      -(original.dest_amount ?? original.amount),
+    );
   } else {
     const origSign = original.type === "income" ? -1 : 1;
     await applyBalance(supabase, original.account_id, origSign * original.amount);
@@ -664,51 +679,6 @@ export async function updateProfile(formData: FormData) {
   revalidatePath("/dashboard", "layout");
 }
 
-// ----------------------------------------------------------------------------
-// Helper: buscar rate de conversión
-// ----------------------------------------------------------------------------
-/**
- * Busca la cotización vigente a la fecha de la transacción.
- * Si no hay ninguna, cae a 1 y lo deja registrado: un rate faltante
- * corrompe amount_base en silencio, así que al menos queda rastro.
- */
-async function fetchRate(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  from: string,
-  to: string,
-  onDate?: string,
-): Promise<number> {
-  if (from === to) return 1;
-
-  let q = supabase
-    .from("exchange_rates")
-    .select("rate")
-    .eq("base", from)
-    .eq("quote", to)
-    .order("date", { ascending: false })
-    .limit(1);
-  if (onDate) q = q.lte("date", onDate);
-
-  const { data } = await q.maybeSingle();
-  if (data?.rate) return data.rate;
-
-  // Probar el par inverso antes de rendirse
-  let inv = supabase
-    .from("exchange_rates")
-    .select("rate")
-    .eq("base", to)
-    .eq("quote", from)
-    .order("date", { ascending: false })
-    .limit(1);
-  if (onDate) inv = inv.lte("date", onDate);
-
-  const { data: inverse } = await inv.maybeSingle();
-  if (inverse?.rate) return 1 / inverse.rate;
-
-  console.warn(`[guita] sin cotización ${from}->${to} al ${onDate ?? "hoy"}; usando 1`);
-  return 1;
-}
-
 /**
  * Ajusta el saldo de una cuenta sumando `delta` (negativo para restar).
  * ponytail: read-modify-write sin transaccion; con un solo usuario alcanza.
@@ -734,14 +704,13 @@ async function applyBalance(
 
 export async function setDefaultAccount(accountId: string) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
 
   // Primero desmarcamos todas las de este usuario
-  await supabase
-    .from("accounts")
-    .update({ is_default: false })
-    .eq("user_id", user.id);
+  await supabase.from("accounts").update({ is_default: false }).eq("user_id", user.id);
 
   // Luego marcamos la seleccionada
   const { error } = await supabase
@@ -752,4 +721,22 @@ export async function setDefaultAccount(accountId: string) {
 
   if (error) throw new Error(error.message);
   revalidatePath("/dashboard/cuentas");
+}
+
+/**
+ * Cotización más reciente del dólar contra `quote`, para prellenar el
+ * formulario de conversión. Devuelve null si no hay: el form pide el valor
+ * en vez de inventar uno.
+ */
+export async function getUsdQuote(quote: string): Promise<number | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("exchange_rates")
+    .select("rate")
+    .eq("base", "USD")
+    .eq("quote", quote)
+    .order("date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data?.rate ?? null;
 }

@@ -2,9 +2,9 @@ import "server-only";
 
 import { createClient } from "@/lib/supabase-server";
 import { getCurrentUser } from "@/lib/dal";
-import { monthStartLocal } from "@/lib/dates";
+import { addMonthsIso, monthEndLocal, monthStartLocal, todayLocal } from "@/lib/dates";
 import type { Rate } from "@/lib/money";
-import { sumInBase } from "@/lib/money";
+import { sumInBase, convert } from "@/lib/money";
 
 // ----------------------------------------------------------------------------
 // Cuentas
@@ -169,8 +169,6 @@ export async function getAccountTransactions(accountId: string) {
 // ----------------------------------------------------------------------------
 export async function getBudgets() {
   const supabase = await createClient();
-  const now = new Date();
-  const from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
 
   const { data: budgets, error } = await supabase
     .from("budgets")
@@ -178,24 +176,30 @@ export async function getBudgets() {
     .order("created_at", { ascending: true });
   if (error) throw error;
 
-  // Buscar gastos del mes agrupados por categoría
+  // Gastos del mes por categoría, en moneda base y sin aportes a metas.
   const { data: expenses } = await supabase
     .from("transactions")
-    .select("category_id, amount, amount_base")
+    .select("category_id, amount_base")
     .eq("is_installment_parent", false)
     .eq("type", "expense")
-    .gte("date", from);
+    .is("goal_id", null)
+    .gte("date", monthStartLocal());
 
   const spentByCategory: Record<string, number> = {};
   for (const e of expenses ?? []) {
     if (e.category_id) {
-      spentByCategory[e.category_id] = (spentByCategory[e.category_id] ?? 0) + e.amount;
+      spentByCategory[e.category_id] = (spentByCategory[e.category_id] ?? 0) + e.amount_base;
     }
   }
 
+  // `spent` ya viene en moneda base; el límite puede estar en otra.
+  const [{ profile }, rates] = await Promise.all([getCurrentUser(), getRates()]);
+
   return budgets.map((b) => ({
     ...b,
-    spent: b.category_id ? spentByCategory[b.category_id] ?? 0 : 0,
+    spent: b.category_id ? (spentByCategory[b.category_id] ?? 0) : 0,
+    /** Límite en moneda base. null si falta la cotización: no se inventa el número. */
+    limitBase: convert(b.amount_limit, b.currency, profile.base_currency, rates),
   }));
 }
 
@@ -218,7 +222,11 @@ export async function getGoals() {
     const remaining = Math.max(0, g.target_amount - g.current_amount);
     const targetDate = g.target_date ? new Date(g.target_date + "T00:00:00") : null;
     const monthsLeft = targetDate
-      ? Math.max(1, (targetDate.getFullYear() - now.getFullYear()) * 12 + (targetDate.getMonth() - now.getMonth()))
+      ? Math.max(
+          1,
+          (targetDate.getFullYear() - now.getFullYear()) * 12 +
+            (targetDate.getMonth() - now.getMonth()),
+        )
       : null;
     const suggestedMonthly = monthsLeft && remaining > 0 ? remaining / monthsLeft : null;
 
@@ -283,10 +291,12 @@ export async function getSubscriptions() {
 
 export async function getSubscriptionsMonthlyTotal() {
   const subs = await getSubscriptions();
-  return subs.filter((s) => s.active).reduce<Record<string, number>>((acc, s) => {
-    acc[s.currency] = (acc[s.currency] ?? 0) + s.monthlyEquivalent;
-    return acc;
-  }, {});
+  return subs
+    .filter((s) => s.active)
+    .reduce<Record<string, number>>((acc, s) => {
+      acc[s.currency] = (acc[s.currency] ?? 0) + s.monthlyEquivalent;
+      return acc;
+    }, {});
 }
 
 // Historial de pagos de una suscripción
@@ -303,144 +313,196 @@ export async function getSubscriptionPayments(subscriptionId: string) {
 
 // ----------------------------------------------------------------------------
 // Reportes
+//
+// Todos los agregados suman `amount_base` (moneda base del usuario), nunca
+// `amount`: con cuentas en ARS y USD, sumar el monto crudo da un número que no
+// significa nada. Y todos excluyen `goal_id`: un aporte a una meta salió de la
+// cuenta pero no se consumió, así que no es gasto.
 // ----------------------------------------------------------------------------
 
-// Desglose por categoría (gastos del período)
-export async function getCategoryBreakdown(opts?: { from?: string; to?: string }) {
+export type ReportFilters = {
+  from?: string;
+  to?: string;
+  accountId?: string;
+  categoryId?: string;
+};
+
+/** Ingresos, gastos y balance del período. Base de todos los KPIs. */
+export async function getPeriodTotals(f?: ReportFilters) {
   const supabase = await createClient();
   let q = supabase
     .from("transactions")
-    .select("amount, amount_base, currency, category:categories(id, name, color, icon)")
-    .eq("type", "expense")
+    .select("type, amount_base")
     .eq("is_installment_parent", false)
+    .in("type", ["income", "expense"])
     .is("goal_id", null);
 
-  if (opts?.from) q = q.gte("date", opts.from);
-  if (opts?.to) q = q.lte("date", opts.to);
+  if (f?.from) q = q.gte("date", f.from);
+  if (f?.to) q = q.lte("date", f.to);
+  if (f?.accountId) q = q.eq("account_id", f.accountId);
+  if (f?.categoryId) q = q.eq("category_id", f.categoryId);
 
   const { data, error } = await q;
   if (error) throw error;
 
-  const byCategory: Record<string, { name: string; color: string; icon: string | null; total: number }> = {};
+  let income = 0;
+  let expense = 0;
   for (const t of data ?? []) {
-    const cat = t.category as unknown as { id: string; name: string; color: string; icon: string | null } | null;
+    if (t.type === "income") income += t.amount_base;
+    else expense += t.amount_base;
+  }
+  return { income, expense, balance: income - expense };
+}
+
+/** Gastos del período agrupados por categoría, de mayor a menor. */
+export async function getCategoryBreakdown(f?: ReportFilters) {
+  const supabase = await createClient();
+  let q = supabase
+    .from("transactions")
+    .select("amount_base, category:categories(id, name, color, icon)")
+    .eq("type", "expense")
+    .eq("is_installment_parent", false)
+    .is("goal_id", null);
+
+  if (f?.from) q = q.gte("date", f.from);
+  if (f?.to) q = q.lte("date", f.to);
+  if (f?.accountId) q = q.eq("account_id", f.accountId);
+  if (f?.categoryId) q = q.eq("category_id", f.categoryId);
+
+  const { data, error } = await q;
+  if (error) throw error;
+
+  const byCategory: Record<
+    string,
+    { id: string; name: string; color: string; icon: string | null; total: number }
+  > = {};
+  for (const t of data ?? []) {
+    const cat = t.category as unknown as {
+      id: string;
+      name: string;
+      color: string;
+      icon: string | null;
+    } | null;
     if (!cat) continue;
     if (!byCategory[cat.id]) {
-      byCategory[cat.id] = { name: cat.name, color: cat.color, icon: cat.icon, total: 0 };
+      byCategory[cat.id] = {
+        id: cat.id,
+        name: cat.name,
+        color: cat.color,
+        icon: cat.icon,
+        total: 0,
+      };
     }
-    byCategory[cat.id].total += t.amount;
+    byCategory[cat.id].total += t.amount_base;
   }
 
   return Object.values(byCategory).sort((a, b) => b.total - a.total);
 }
 
-// Tendencias temporales (últimos 6 meses: ingresos vs gastos)
-export async function getMonthlyTrends() {
-  const supabase = await createClient();
-  const now = new Date();
-  const months: { label: string; from: string; to: string }[] = [];
-
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const next = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
-    months.push({
-      label: d.toLocaleDateString("es-AR", { month: "short" }),
-      from: d.toISOString().slice(0, 10),
-      to: next.toISOString().slice(0, 10),
-    });
-  }
-
-  const results = await Promise.all(
-    months.map(async (m) => {
-      const { data } = await supabase
-        .from("transactions")
-        .select("type, amount")
-        .eq("is_installment_parent", false)
-        .in("type", ["income", "expense"])
-        .gte("date", m.from)
-        .lte("date", m.to);
-      let income = 0;
-      let expense = 0;
-      for (const t of data ?? []) {
-        if (t.type === "income") income += t.amount;
-        else if (t.type === "expense") expense += t.amount;
-      }
-      return { month: m.label, ingresos: income, gastos: expense, ahorro: income - expense };
-    }),
-  );
-
-  return results;
-}
-
-// Comparativa mes actual vs mes anterior
-export async function getMonthComparison() {
-  const supabase = await createClient();
-  const now = new Date();
-
-  const thisFrom = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-  const prevFrom = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 10);
-  const prevTo = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().slice(0, 10);
-
-  const [currRes, prevRes] = await Promise.all([
-    supabase
-      .from("transactions")
-      .select("type, amount")
-      .eq("is_installment_parent", false)
-      .in("type", ["income", "expense"])
-      .gte("date", thisFrom),
-    supabase
-      .from("transactions")
-      .select("type, amount")
-      .eq("is_installment_parent", false)
-      .in("type", ["income", "expense"])
-      .gte("date", prevFrom)
-      .lte("date", prevTo),
-  ]);
-
-  function sum(data: { type: string; amount: number }[]) {
-    let income = 0;
-    let expense = 0;
-    for (const t of data ?? []) {
-      if (t.type === "income") income += t.amount;
-      else if (t.type === "expense") expense += t.amount;
-    }
-    return { income, expense, ahorro: income - expense };
-  }
-
-  return {
-    current: sum(currRes.data ?? []),
-    previous: sum(prevRes.data ?? []),
-  };
-}
-
-// Por método de pago (cuenta)
-export async function getBreakdownByAccount(opts?: { from?: string; to?: string }) {
+/** Movimientos del período agrupados por cuenta / método de pago. */
+export async function getBreakdownByAccount(f?: ReportFilters) {
   const supabase = await createClient();
   let q = supabase
     .from("transactions")
-    .select("amount, type, account:accounts!transactions_account_id_fkey(id, name, type)")
+    .select("amount_base, type, account:accounts!transactions_account_id_fkey(id, name, type)")
     .eq("is_installment_parent", false)
-    .in("type", ["expense", "income"]);
+    .in("type", ["expense", "income"])
+    .is("goal_id", null);
 
-  if (opts?.from) q = q.gte("date", opts.from);
-  if (opts?.to) q = q.lte("date", opts.to);
+  if (f?.from) q = q.gte("date", f.from);
+  if (f?.to) q = q.lte("date", f.to);
+  if (f?.accountId) q = q.eq("account_id", f.accountId);
+  if (f?.categoryId) q = q.eq("category_id", f.categoryId);
 
   const { data, error } = await q;
   if (error) throw error;
 
-  const byAccount: Record<string, { name: string; type: string; income: number; expense: number }> = {};
+  const byAccount: Record<
+    string,
+    { id: string; name: string; type: string; income: number; expense: number }
+  > = {};
   for (const t of data ?? []) {
     const acc = t.account as unknown as { id: string; name: string; type: string } | null;
     if (!acc) continue;
     if (!byAccount[acc.id]) {
-      byAccount[acc.id] = { name: acc.name, type: acc.type, income: 0, expense: 0 };
+      byAccount[acc.id] = { id: acc.id, name: acc.name, type: acc.type, income: 0, expense: 0 };
     }
-    if (t.type === "income") byAccount[acc.id].income += t.amount;
-    else if (t.type === "expense") byAccount[acc.id].expense += t.amount;
+    if (t.type === "income") byAccount[acc.id].income += t.amount_base;
+    else byAccount[acc.id].expense += t.amount_base;
   }
 
-  return Object.values(byAccount).sort((a, b) => b.expense + b.income - (a.expense + a.income));
+  return Object.values(byAccount).sort((a, b) => b.expense - a.expense);
 }
+
+/**
+ * Evolución mensual: una sola consulta por todo el rango, agrupada en memoria.
+ * (Antes era una consulta por mes.)
+ */
+export async function getMonthlyTrends(months = 6, f?: ReportFilters) {
+  const supabase = await createClient();
+  const now = new Date();
+  const first = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
+
+  let q = supabase
+    .from("transactions")
+    .select("type, amount_base, date")
+    .eq("is_installment_parent", false)
+    .in("type", ["income", "expense"])
+    .is("goal_id", null)
+    .gte("date", monthStartLocal(first))
+    .lte("date", monthEndLocal(now));
+
+  if (f?.accountId) q = q.eq("account_id", f.accountId);
+  if (f?.categoryId) q = q.eq("category_id", f.categoryId);
+
+  const { data, error } = await q;
+  if (error) throw error;
+
+  const buckets = new Map<
+    string,
+    { month: string; ingresos: number; gastos: number; balance: number }
+  >();
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    buckets.set(monthStartLocal(d).slice(0, 7), {
+      month: d.toLocaleDateString("es-AR", { month: "short" }),
+      ingresos: 0,
+      gastos: 0,
+      balance: 0,
+    });
+  }
+
+  for (const t of data ?? []) {
+    const bucket = buckets.get(t.date.slice(0, 7));
+    if (!bucket) continue;
+    if (t.type === "income") bucket.ingresos += t.amount_base;
+    else bucket.gastos += t.amount_base;
+  }
+  for (const bucket of buckets.values()) bucket.balance = bucket.ingresos - bucket.gastos;
+
+  return [...buckets.values()];
+}
+
+/**
+ * Cuotas que vencen en los próximos 30 días.
+ * El saldo de la cuenta solo se mueve por cuota vencida, así que estas son
+ * plata que ya debés pero todavía no salió. El horizonte es rodante y no "hasta
+ * fin de mes": el día 28 eso no mostraría nada aunque debas de todo.
+ */
+export async function getPendingInstallments() {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("id, note, amount, amount_base, currency, date, installment_number, installments_total")
+    .eq("is_installment_parent", false)
+    .not("installment_number", "is", null)
+    .gt("date", todayLocal())
+    .lte("date", addMonthsIso(todayLocal(), 1))
+    .order("date", { ascending: true });
+  if (error) throw error;
+  return data;
+}
+
 export async function getTransactions(opts?: {
   limit?: number;
   type?: string;
@@ -471,34 +533,4 @@ export async function getTransactions(opts?: {
   const { data, error } = await q;
   if (error) throw error;
   return data;
-}
-
-export async function getMonthlySummary() {
-  const { profile } = await getCurrentUser();
-  const from = monthStartLocal();
-  const supabase = await createClient();
-
-  const { data, error } = await supabase
-    .from("transactions")
-    .select("type, amount, amount_base, goal_id")
-    .in("type", ["income", "expense"])
-    .eq("is_installment_parent", false)
-    .gte("date", from);
-
-  if (error) throw error;
-
-  const summary = { income: 0, expense: 0, savings: 0, incomeBase: 0, expenseBase: 0 };
-  for (const t of data ?? []) {
-    if (t.type === "income") {
-      summary.income += t.amount;
-      summary.incomeBase += t.amount_base;
-    } else if (t.goal_id) {
-      // Aporte a una meta: salió de la cuenta, pero no se consumió.
-      summary.savings += t.amount;
-    } else {
-      summary.expense += t.amount;
-      summary.expenseBase += t.amount_base;
-    }
-  }
-  return { ...summary, baseCurrency: profile.base_currency };
 }

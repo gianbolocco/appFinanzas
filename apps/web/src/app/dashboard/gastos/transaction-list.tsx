@@ -33,7 +33,7 @@ type Category = {
   color: string;
   is_predefined: boolean;
 };
-type Account = { id: string; name: string; type: string; currency: string };
+type Account = { id: string; name: string; type: string; currency: string; balance: number };
 
 const TYPE_LABELS: Record<string, string> = {
   expense: "Gasto",
@@ -47,24 +47,26 @@ export function TransactionList({
   categories,
   accounts,
   baseCurrency,
+  initialCategory = "",
 }: {
   transactions: Tx[];
   categories: Category[];
   accounts: Account[];
   baseCurrency: string;
+  initialCategory?: string;
 }) {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("");
-  const [catFilter, setCatFilter] = useState<string>("");
+  const [catFilter, setCatFilter] = useState<string>(initialCategory);
   const [accFilter, setAccFilter] = useState<string>("");
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(Boolean(initialCategory));
   const [editingTx, setEditingTx] = useState<Tx | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const filtered = useMemo(() => {
     return transactions.filter((t) => {
       if (typeFilter && t.type !== typeFilter) return false;
-      if (catFilter && t.category?.name !== catFilter) return false;
+      if (catFilter && t.category_id !== catFilter) return false;
       if (accFilter && t.account?.name !== accFilter) return false;
       if (search) {
         const q = search.toLowerCase();
@@ -99,12 +101,12 @@ export function TransactionList({
       {/* Barra de búsqueda + filtro */}
       <div className="flex gap-2">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="text-muted-foreground absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar…"
-            className="h-10 w-full rounded-xl border border-input bg-card pl-9 pr-3 text-sm outline-none focus:border-primary"
+            className="border-input bg-card focus:border-primary h-10 w-full rounded-xl border pl-9 pr-3 text-sm outline-none"
           />
         </div>
         <button
@@ -117,26 +119,30 @@ export function TransactionList({
 
       {/* Filtros expandibles */}
       {showFilters && (
-        <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-3 shadow-sm">
+        <div className="border-border bg-card flex flex-col gap-2 rounded-2xl border p-3 shadow-sm">
           <div className="flex gap-2">
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
-              className="h-9 flex-1 rounded-lg border border-input bg-background px-2 text-xs outline-none focus:border-primary"
+              className="border-input bg-background focus:border-primary h-9 flex-1 rounded-lg border px-2 text-xs outline-none"
             >
               <option value="">Todos los tipos</option>
               {Object.entries(TYPE_LABELS).map(([v, l]) => (
-                <option key={v} value={v}>{l}</option>
+                <option key={v} value={v}>
+                  {l}
+                </option>
               ))}
             </select>
             <select
               value={catFilter}
               onChange={(e) => setCatFilter(e.target.value)}
-              className="h-9 flex-1 rounded-lg border border-input bg-background px-2 text-xs outline-none focus:border-primary"
+              className="border-input bg-background focus:border-primary h-9 flex-1 rounded-lg border px-2 text-xs outline-none"
             >
               <option value="">Todas las categorías</option>
               {categories.map((c) => (
-                <option key={c.id} value={c.name}>{c.name}</option>
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
               ))}
             </select>
           </div>
@@ -144,17 +150,19 @@ export function TransactionList({
             <select
               value={accFilter}
               onChange={(e) => setAccFilter(e.target.value)}
-              className="h-9 flex-1 rounded-lg border border-input bg-background px-2 text-xs outline-none focus:border-primary"
+              className="border-input bg-background focus:border-primary h-9 flex-1 rounded-lg border px-2 text-xs outline-none"
             >
               <option value="">Todas las cuentas</option>
               {accounts.map((a) => (
-                <option key={a.id} value={a.name}>{a.name}</option>
+                <option key={a.id} value={a.name}>
+                  {a.name}
+                </option>
               ))}
             </select>
             {hasFilters && (
               <button
                 onClick={clearFilters}
-                className="flex h-9 items-center gap-1 rounded-lg border border-border px-2 text-xs text-muted-foreground hover:bg-accent"
+                className="border-border text-muted-foreground hover:bg-accent flex h-9 items-center gap-1 rounded-lg border px-2 text-xs"
               >
                 <X className="h-3 w-3" /> Limpiar
               </button>
@@ -165,9 +173,11 @@ export function TransactionList({
 
       {/* Lista */}
       {filtered.length === 0 ? (
-        <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
-          <p className="text-sm text-muted-foreground">
-            {hasFilters ? "No hay movimientos con esos filtros." : "Todavía no cargaste movimientos."}
+        <div className="border-border bg-card rounded-2xl border p-8 text-center shadow-sm">
+          <p className="text-muted-foreground text-sm">
+            {hasFilters
+              ? "No hay movimientos con esos filtros."
+              : "Todavía no cargaste movimientos."}
           </p>
         </div>
       ) : (
@@ -181,7 +191,7 @@ export function TransactionList({
             return (
               <div
                 key={t.id}
-                className="group flex items-center gap-3 rounded-2xl border border-border bg-card p-3.5 shadow-sm transition hover:shadow-md"
+                className="border-border bg-card group flex items-center gap-3 rounded-2xl border p-3.5 shadow-sm transition hover:shadow-md"
               >
                 <div
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
@@ -193,12 +203,12 @@ export function TransactionList({
                   <p className="truncate text-sm font-medium">
                     {t.note ?? t.category?.name ?? "Movimiento"}
                     {isInstallment && (
-                      <span className="ml-1 text-xs text-muted-foreground">
+                      <span className="text-muted-foreground ml-1 text-xs">
                         ({t.installment_number}/{t.installments_total})
                       </span>
                     )}
                   </p>
-                  <p className="truncate text-xs text-muted-foreground">
+                  <p className="text-muted-foreground truncate text-xs">
                     {formatShortDate(t.date)} · {t.account?.name} · {TYPE_LABELS[t.type]}
                     {t.type === "transfer" && t.to_account && ` → ${t.to_account.name}`}
                   </p>
@@ -210,7 +220,7 @@ export function TransactionList({
                 </p>
                 <button
                   onClick={() => openEdit(t)}
-                  className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-accent hover:text-foreground lg:opacity-0 lg:group-hover:opacity-100"
+                  className="text-muted-foreground hover:bg-accent hover:text-foreground rounded-lg p-1.5 transition lg:opacity-0 lg:group-hover:opacity-100"
                   aria-label="Editar"
                 >
                   <Pencil className="h-4 w-4" />
@@ -223,7 +233,9 @@ export function TransactionList({
 
       <TransactionSheet
         open={sheetOpen}
-        onOpenChange={(o) => { if (!o) closeSheet() }}
+        onOpenChange={(o) => {
+          if (!o) closeSheet();
+        }}
         accounts={accounts}
         categories={categories}
         baseCurrency={baseCurrency}

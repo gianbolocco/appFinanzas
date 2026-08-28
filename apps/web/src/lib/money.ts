@@ -68,3 +68,18 @@ export function installmentDates(startIso: string, n: number): string[] {
 export function dueThrough(dates: string[], todayIso: string): number {
   return dates.filter((d) => d <= todayIso).length;
 }
+
+/**
+ * Pasa una cotización escrita como "1 `ref` = `quote` de la otra moneda" al
+ * rate origen→destino que espera la transferencia.
+ * La UI siempre pide la referencia en dólares (1 USD = 1450 ARS), así que
+ * cuando el origen no es el dólar hay que invertirla.
+ */
+export function destRateFromQuote(
+  fromCurrency: string,
+  refCurrency: string,
+  quote: number,
+): number {
+  if (!(quote > 0)) return 0;
+  return fromCurrency === refCurrency ? quote : 1 / quote;
+}

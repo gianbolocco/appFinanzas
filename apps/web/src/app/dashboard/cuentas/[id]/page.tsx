@@ -59,6 +59,7 @@ export default async function AccountDetailPage({ params }: PageProps<"/dashboar
     name: a.name,
     type: a.type,
     currency: a.currency,
+    balance: a.balance,
   }));
   const slimCategories = allCategories.map((c) => ({
     id: c.id,
@@ -77,57 +78,58 @@ export default async function AccountDetailPage({ params }: PageProps<"/dashboar
     <div className="flex flex-col gap-5">
       <Link
         href="/dashboard/cuentas"
-        className="flex items-center gap-1 text-sm text-muted-foreground transition hover:text-foreground"
+        className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm transition"
       >
         <ArrowLeft className="h-4 w-4" /> Cuentas
       </Link>
 
       {/* Header de la cuenta */}
       <div className="flex items-center gap-3">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+        <div className="bg-primary/10 text-primary flex h-12 w-12 items-center justify-center rounded-2xl">
           <Icon className="h-6 w-6" />
         </div>
         <div>
           <h1 className="text-xl font-semibold lg:text-2xl">{account.name}</h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-muted-foreground text-sm">
             {TYPE_LABELS[account.type] ?? account.type} · {account.currency}
           </p>
         </div>
       </div>
 
       {/* Saldo */}
-      <section className="rounded-3xl bg-primary p-5 text-primary-foreground shadow-sm">
+      <section className="bg-primary text-primary-foreground rounded-3xl p-5 shadow-sm">
         <p className="text-sm/none opacity-80">Saldo actual</p>
         <p className="mt-2 font-mono text-3xl font-semibold tabular-nums lg:text-4xl">
           {formatMoney(account.balance, account.currency)}
         </p>
-        <p className="mt-2 text-sm text-primary-foreground/80">
-          {monthChange >= 0 ? "↑" : "↓"} {formatMoney(Math.abs(monthChange), account.currency)} este mes
+        <p className="text-primary-foreground/80 mt-2 text-sm">
+          {monthChange >= 0 ? "↑" : "↓"} {formatMoney(Math.abs(monthChange), account.currency)} este
+          mes
         </p>
       </section>
 
       {/* Resumen del mes */}
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-          <p className="text-xs text-muted-foreground">Ingresos</p>
-          <p className="mt-1 font-mono text-sm font-semibold text-primary tabular-nums">
+        <div className="border-border bg-card rounded-2xl border p-4 shadow-sm">
+          <p className="text-muted-foreground text-xs">Ingresos</p>
+          <p className="text-primary mt-1 font-mono text-sm font-semibold tabular-nums">
             {formatMoney(stats.income, account.currency)}
           </p>
         </div>
-        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-          <p className="text-xs text-muted-foreground">Gastos</p>
+        <div className="border-border bg-card rounded-2xl border p-4 shadow-sm">
+          <p className="text-muted-foreground text-xs">Gastos</p>
           <p className="mt-1 font-mono text-sm font-semibold tabular-nums">
             {formatMoney(stats.expense, account.currency)}
           </p>
         </div>
-        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-          <p className="text-xs text-muted-foreground">Transf. entrantes</p>
-          <p className="mt-1 font-mono text-sm font-semibold text-primary tabular-nums">
+        <div className="border-border bg-card rounded-2xl border p-4 shadow-sm">
+          <p className="text-muted-foreground text-xs">Transf. entrantes</p>
+          <p className="text-primary mt-1 font-mono text-sm font-semibold tabular-nums">
             {formatMoney(stats.transferIn, account.currency)}
           </p>
         </div>
-        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-          <p className="text-xs text-muted-foreground">Transf. salientes</p>
+        <div className="border-border bg-card rounded-2xl border p-4 shadow-sm">
+          <p className="text-muted-foreground text-xs">Transf. salientes</p>
           <p className="mt-1 font-mono text-sm font-semibold tabular-nums">
             {formatMoney(stats.transferOut, account.currency)}
           </p>
@@ -135,9 +137,9 @@ export default async function AccountDetailPage({ params }: PageProps<"/dashboar
       </section>
 
       {/* Saldo mes anterior */}
-      <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <section className="border-border bg-card rounded-2xl border p-4 shadow-sm">
         <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">Saldo a fin del mes anterior</span>
+          <span className="text-muted-foreground text-sm">Saldo a fin del mes anterior</span>
           <span className="font-mono text-sm font-semibold tabular-nums">
             {formatMoney(prevMonthBalance, account.currency)}
           </span>

@@ -1,4 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
+
+import { fetchRate } from "@/lib/rates";
 import { z } from "zod";
 import { generateObject } from "ai";
 import { google } from "@ai-sdk/google";
@@ -6,7 +8,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
 async function sendTelegramMessage(chatId: string, text: string, replyMarkup?: any) {
@@ -14,7 +16,7 @@ async function sendTelegramMessage(chatId: string, text: string, replyMarkup?: a
   if (!token) return;
   const body: any = { chat_id: chatId, text };
   if (replyMarkup) body.reply_markup = replyMarkup;
-  
+
   await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -38,24 +40,47 @@ async function downloadTelegramFile(fileId: string) {
   const getFileRes = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${fileId}`);
   const getFileJson = await getFileRes.json();
   if (!getFileJson.ok) throw new Error("Could not get file info");
-  
+
   const filePath = getFileJson.result.file_path;
   const fileRes = await fetch(`https://api.telegram.org/file/bot${token}/${filePath}`);
   const arrayBuffer = await fileRes.arrayBuffer();
   return {
     buffer: Buffer.from(arrayBuffer),
-    mimeType: (filePath.endsWith('.ogg') || filePath.endsWith('.oga') || filePath.startsWith('voice/')) ? 'audio/ogg' : 'image/jpeg'
+    mimeType:
+      filePath.endsWith(".ogg") || filePath.endsWith(".oga") || filePath.startsWith("voice/")
+        ? "audio/ogg"
+        : "image/jpeg",
   };
 }
 
 const TransactionExtraction = z.object({
-  is_transaction: z.boolean().describe("True si el usuario quiere registrar un gasto, ingreso o transferencia. False si solo está saludando o consultando algo general."),
-  reply_message: z.string().optional().describe("Si is_transaction es false, va tu respuesta amigable y de ayuda. También usalo si falta información vital."),
+  is_transaction: z
+    .boolean()
+    .describe(
+      "True si el usuario quiere registrar un gasto, ingreso o transferencia. False si solo está saludando o consultando algo general.",
+    ),
+  reply_message: z
+    .string()
+    .optional()
+    .describe(
+      "Si is_transaction es false, va tu respuesta amigable y de ayuda. También usalo si falta información vital.",
+    ),
   amount: z.number().optional().describe("El monto numérico del movimiento"),
   type: z.enum(["expense", "income", "transfer"]).optional().describe("Tipo de movimiento"),
-  category_name: z.string().optional().describe("El nombre de la categoría elegida de la lista proporcionada. Nulo si es transferencia."),
-  account_name: z.string().optional().describe("El nombre exacto de la cuenta origen (o donde ingresa la plata)."),
-  to_account_name: z.string().optional().describe("El nombre exacto de la cuenta destino (SOLO si es transferencia)."),
+  category_name: z
+    .string()
+    .optional()
+    .describe(
+      "El nombre de la categoría elegida de la lista proporcionada. Nulo si es transferencia.",
+    ),
+  account_name: z
+    .string()
+    .optional()
+    .describe("El nombre exacto de la cuenta origen (o donde ingresa la plata)."),
+  to_account_name: z
+    .string()
+    .optional()
+    .describe("El nombre exacto de la cuenta destino (SOLO si es transferencia)."),
   description: z.string().optional().describe("Concepto breve del movimiento"),
   date: z.string().optional().describe("Fecha en formato YYYY-MM-DD"),
 });
@@ -71,7 +96,7 @@ export async function POST(req: Request) {
     let parsedUpdate: any = null;
     try {
       parsedUpdate = await req.json();
-    } catch(e) {}
+    } catch (e) {}
     update = parsedUpdate || {};
 
     // ----------------------------------------------------------------------
@@ -102,8 +127,45 @@ export async function POST(req: Request) {
           .single();
 
         if (!pendingTx) {
-          await editTelegramMessage(chatId, messageId, "⚠️ El movimiento ya fue procesado o expiró.");
+          await editTelegramMessage(
+            chatId,
+            messageId,
+            "⚠️ El movimiento ya fue procesado o expiró.",
+          );
           return new Response("OK");
+        }
+
+        // Cotización real a la fecha del movimiento: sin esto un gasto en USD
+        // entraba a los reportes y al saldo como si fueran pesos.
+        const { data: profile } = await supabaseAdmin
+          .from("users")
+          .select("base_currency")
+          .eq("id", pendingTx.user_id)
+          .single();
+        const baseCurrency = profile?.base_currency ?? "ARS";
+        const rate = await fetchRate(
+          supabaseAdmin,
+          pendingTx.currency,
+          baseCurrency,
+          pendingTx.date,
+        );
+
+        // En una transferencia el destino puede estar en otra moneda que el
+        // origen: `dest_amount` va siempre en la moneda de la cuenta destino.
+        let destAmount: number | null = null;
+        if (pendingTx.type === "transfer" && pendingTx.to_account_id) {
+          const { data: destAccount } = await supabaseAdmin
+            .from("accounts")
+            .select("currency")
+            .eq("id", pendingTx.to_account_id)
+            .single();
+          const destRate = await fetchRate(
+            supabaseAdmin,
+            pendingTx.currency,
+            destAccount?.currency ?? pendingTx.currency,
+            pendingTx.date,
+          );
+          destAmount = Math.round(pendingTx.amount * destRate * 100) / 100;
         }
 
         const { error: txError } = await supabaseAdmin.from("transactions").insert({
@@ -117,9 +179,9 @@ export async function POST(req: Request) {
           account_id: pendingTx.account_id,
           to_account_id: pendingTx.to_account_id,
           source: "bot",
-          amount_base: pendingTx.amount, // asumiendo 1:1
-          dest_amount: pendingTx.type === "transfer" ? pendingTx.amount : null,
-          exchange_rate: 1,
+          amount_base: pendingTx.amount * rate,
+          dest_amount: destAmount,
+          exchange_rate: rate,
         });
 
         if (txError) {
@@ -128,20 +190,42 @@ export async function POST(req: Request) {
         } else {
           // Actualizar saldos de cuenta
           if (pendingTx.type === "transfer") {
-            const { data: accFrom } = await supabaseAdmin.from("accounts").select("balance").eq("id", pendingTx.account_id).single();
-            const { data: accTo } = await supabaseAdmin.from("accounts").select("balance").eq("id", pendingTx.to_account_id).single();
-            
+            const { data: accFrom } = await supabaseAdmin
+              .from("accounts")
+              .select("balance")
+              .eq("id", pendingTx.account_id)
+              .single();
+            const { data: accTo } = await supabaseAdmin
+              .from("accounts")
+              .select("balance")
+              .eq("id", pendingTx.to_account_id)
+              .single();
+
             if (accFrom) {
-              await supabaseAdmin.from("accounts").update({ balance: accFrom.balance - pendingTx.amount }).eq("id", pendingTx.account_id);
+              await supabaseAdmin
+                .from("accounts")
+                .update({ balance: accFrom.balance - pendingTx.amount })
+                .eq("id", pendingTx.account_id);
             }
             if (accTo) {
-              await supabaseAdmin.from("accounts").update({ balance: accTo.balance + pendingTx.amount }).eq("id", pendingTx.to_account_id);
+              // El destino se acredita en su propia moneda, no en la del origen.
+              await supabaseAdmin
+                .from("accounts")
+                .update({ balance: accTo.balance + (destAmount ?? pendingTx.amount) })
+                .eq("id", pendingTx.to_account_id);
             }
           } else {
             const sign = pendingTx.type === "income" ? 1 : -1;
-            const { data: acc } = await supabaseAdmin.from("accounts").select("balance").eq("id", pendingTx.account_id).single();
+            const { data: acc } = await supabaseAdmin
+              .from("accounts")
+              .select("balance")
+              .eq("id", pendingTx.account_id)
+              .single();
             if (acc) {
-              await supabaseAdmin.from("accounts").update({ balance: acc.balance + (sign * pendingTx.amount) }).eq("id", pendingTx.account_id);
+              await supabaseAdmin
+                .from("accounts")
+                .update({ balance: acc.balance + sign * pendingTx.amount })
+                .eq("id", pendingTx.account_id);
             }
           }
 
@@ -192,7 +276,10 @@ export async function POST(req: Request) {
         .single();
 
       if (!pairCode) {
-        await sendTelegramMessage(chatId, "❌ Código inválido o expirado. Generá uno nuevo en la app.");
+        await sendTelegramMessage(
+          chatId,
+          "❌ Código inválido o expirado. Generá uno nuevo en la app.",
+        );
         return new Response("OK");
       }
 
@@ -202,22 +289,38 @@ export async function POST(req: Request) {
         telegram_user_id: message.from.username || message.from.first_name,
       });
 
-      await supabaseAdmin.from("pair_codes").update({ used_at: new Date().toISOString() }).eq("id", pairCode.id);
-      await sendTelegramMessage(chatId, "✅ ¡Cuenta vinculada con éxito! Mandame tus gastos, tickets o audios por acá.");
+      await supabaseAdmin
+        .from("pair_codes")
+        .update({ used_at: new Date().toISOString() })
+        .eq("id", pairCode.id);
+      await sendTelegramMessage(
+        chatId,
+        "✅ ¡Cuenta vinculada con éxito! Mandame tus gastos, tickets o audios por acá.",
+      );
       return new Response("OK");
     }
 
     if (text === "/start" || text === "/help") {
       const appUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://appfinanzas.vercel.app";
-      await sendTelegramMessage(chatId, `🤖 **Bot de Guita**\n\nPodés mandarme:\n- ✍️ Mensajes de texto ("Gaste 5 mil en verdulería")\n- 🎤 Notas de voz\n- 📸 Fotos de tickets\n- 🔄 Transferencias ("Pase 10 lucas de Efectivo a BBVA")\n\n🔗 [Abrir la App](${appUrl})`);
+      await sendTelegramMessage(
+        chatId,
+        `🤖 **Bot de Guita**\n\nPodés mandarme:\n- ✍️ Mensajes de texto ("Gaste 5 mil en verdulería")\n- 🎤 Notas de voz\n- 📸 Fotos de tickets\n- 🔄 Transferencias ("Pase 10 lucas de Efectivo a BBVA")\n\n🔗 [Abrir la App](${appUrl})`,
+      );
       return new Response("OK");
     }
 
     // Verificar si está vinculado
-    const { data: link } = await supabaseAdmin.from("bot_links").select("user_id").eq("telegram_chat_id", chatId).single();
+    const { data: link } = await supabaseAdmin
+      .from("bot_links")
+      .select("user_id")
+      .eq("telegram_chat_id", chatId)
+      .single();
     if (!link) {
       const appUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://appfinanzas.vercel.app";
-      await sendTelegramMessage(chatId, `❌ Tu cuenta de Telegram no está vinculada.\n\nPara vincularla, entrá a Ajustes > Integraciones en la app y generá un código.\n\n🔗 [Abrir la App](${appUrl})`);
+      await sendTelegramMessage(
+        chatId,
+        `❌ Tu cuenta de Telegram no está vinculada.\n\nPara vincularla, entrá a Ajustes > Integraciones en la app y generá un código.\n\n🔗 [Abrir la App](${appUrl})`,
+      );
       return new Response("OK");
     }
     const userId = link.user_id;
@@ -237,8 +340,8 @@ export async function POST(req: Request) {
       return new Response("OK");
     }
 
-    const categoryNames = categories.map(c => c.name).join(", ");
-    const accountNames = accounts.map(a => a.name).join(", ");
+    const categoryNames = categories.map((c) => c.name).join(", ");
+    const accountNames = accounts.map((a) => a.name).join(", ");
 
     let aiModel;
     if (process.env.ANTHROPIC_API_KEY) {
@@ -265,10 +368,16 @@ export async function POST(req: Request) {
       La fecha de hoy es ${new Date().toISOString().split("T")[0]}.`;
 
     const userMessages: any[] = [
-      { role: "user", content: [
-        { type: "text", text: text || "Analizá el archivo adjunto para extraer el gasto o ingreso." },
-        ...fileParts
-      ]}
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: text || "Analizá el archivo adjunto para extraer el gasto o ingreso.",
+          },
+          ...fileParts,
+        ],
+      },
     ];
 
     const { object: extraction } = await generateObject({
@@ -284,28 +393,40 @@ export async function POST(req: Request) {
     }
 
     if (!extraction.is_transaction) {
-      await sendTelegramMessage(chatId, extraction.reply_message || "¡Hola! ¿En qué te puedo ayudar hoy?");
+      await sendTelegramMessage(
+        chatId,
+        extraction.reply_message || "¡Hola! ¿En qué te puedo ayudar hoy?",
+      );
       return new Response("OK");
     }
 
     if (!extraction.amount || !extraction.type) {
-      await sendTelegramMessage(chatId, "⚠️ No pude detectar el monto o el tipo de movimiento. ¿Me lo detallarías un poco más?");
+      await sendTelegramMessage(
+        chatId,
+        "⚠️ No pude detectar el monto o el tipo de movimiento. ¿Me lo detallarías un poco más?",
+      );
       return new Response("OK");
     }
 
     // Buscar IDs
     let categoryId = null;
     if (extraction.type !== "transfer") {
-      categoryId = categories.find(c => c.name.toLowerCase() === (extraction.category_name || "").toLowerCase())?.id;
+      categoryId = categories.find(
+        (c) => c.name.toLowerCase() === (extraction.category_name || "").toLowerCase(),
+      )?.id;
       if (!categoryId) categoryId = categories[0].id;
     }
 
-    let accountObj = accounts.find(a => a.name.toLowerCase() === (extraction.account_name || "").toLowerCase());
-    if (!accountObj) accountObj = accounts.find(a => a.is_default) || accounts[0];
+    let accountObj = accounts.find(
+      (a) => a.name.toLowerCase() === (extraction.account_name || "").toLowerCase(),
+    );
+    if (!accountObj) accountObj = accounts.find((a) => a.is_default) || accounts[0];
 
     let toAccountObj = null;
     if (extraction.type === "transfer" && extraction.to_account_name) {
-      toAccountObj = accounts.find(a => a.name.toLowerCase() === extraction.to_account_name?.toLowerCase());
+      toAccountObj = accounts.find(
+        (a) => a.name.toLowerCase() === extraction.to_account_name?.toLowerCase(),
+      );
     }
 
     // Guardar en tabla temporal
@@ -334,7 +455,7 @@ export async function POST(req: Request) {
 
     let typeStr = "Gasto";
     let msgText = "";
-    
+
     if (extraction.type === "transfer") {
       typeStr = "Transferencia";
       msgText = `¿Confirmar esta ${typeStr}?\n\n💰 Monto: $${extraction.amount}\n📤 Origen: ${accountObj.name}\n📥 Destino: ${toAccountObj ? toAccountObj.name : "Desconocido"}\n📝 Concepto: ${extraction.description}`;
@@ -347,9 +468,9 @@ export async function POST(req: Request) {
       inline_keyboard: [
         [
           { text: `✅ Confirmar ${typeStr}`, callback_data: `conf_${pendingTx.id}` },
-          { text: "❌ Cancelar", callback_data: `canc_${pendingTx.id}` }
-        ]
-      ]
+          { text: "❌ Cancelar", callback_data: `canc_${pendingTx.id}` },
+        ],
+      ],
     });
 
     return new Response("OK");
@@ -360,7 +481,7 @@ export async function POST(req: Request) {
       if (chatId) {
         await sendTelegramMessage(chatId.toString(), "❌ Error: " + (err.message || String(err)));
       }
-    } catch(e) {}
+    } catch (e) {}
     return new Response("OK", { status: 200 });
   }
 }

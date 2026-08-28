@@ -24,7 +24,7 @@ const MORE_ROUTES = [
   "/dashboard/ajustes",
 ];
 
-type Account = { id: string; name: string; type: string; currency: string };
+type Account = { id: string; name: string; type: string; currency: string; balance: number };
 type Category = {
   id: string;
   name: string;

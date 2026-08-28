@@ -20,7 +20,7 @@ const NAV_ITEMS = [
   { href: "/dashboard/ajustes", icon: Settings, label: "Ajustes" },
 ];
 
-type Account = { id: string; name: string; type: string; currency: string };
+type Account = { id: string; name: string; type: string; currency: string; balance: number };
 type Category = {
   id: string;
   name: string;

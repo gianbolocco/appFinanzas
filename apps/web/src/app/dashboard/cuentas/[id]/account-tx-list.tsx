@@ -34,7 +34,7 @@ type Category = {
   color: string;
   is_predefined: boolean;
 };
-type Account = { id: string; name: string; type: string; currency: string };
+type Account = { id: string; name: string; type: string; currency: string; balance: number };
 
 const TYPE_LABELS: Record<string, string> = {
   expense: "Gasto",
