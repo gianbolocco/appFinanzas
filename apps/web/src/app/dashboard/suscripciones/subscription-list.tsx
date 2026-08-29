@@ -23,6 +23,7 @@ import {
   toggleSubscription,
   registerSubscriptionPayment,
 } from "@/lib/actions";
+import { todayLocal } from "@/lib/dates";
 import { formatMoney, formatDate } from "@/lib/format";
 import { Modal } from "@/components/modal";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -181,7 +182,7 @@ export function SubscriptionList({
     return (
       <div
         key={s.id}
-        className={`group rounded-2xl border border-border bg-card p-4 shadow-sm ${!s.active ? "opacity-60" : ""}`}
+        className={`border-border bg-card group rounded-2xl border p-4 shadow-sm ${!s.active ? "opacity-60" : ""}`}
       >
         <div className="flex items-center gap-3">
           <div
@@ -197,7 +198,7 @@ export function SubscriptionList({
           </div>
           <div className="flex-1">
             <p className="text-sm font-medium">{s.name}</p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               {formatMoney(s.amount, s.currency)} · {CADENCE_LABELS[s.cadence] ?? s.cadence}
               {s.account && ` · ${s.account.name}`}
             </p>
@@ -207,14 +208,14 @@ export function SubscriptionList({
           </p>
           <button
             onClick={() => openEdit(s)}
-            className="rounded-lg p-2 text-muted-foreground transition hover:bg-accent hover:text-foreground"
+            className="text-muted-foreground hover:bg-accent hover:text-foreground rounded-lg p-2 transition"
             aria-label="Editar"
           >
             <Pencil className="h-4 w-4" />
           </button>
           <button
             onClick={() => setExpandedId(isExpanded ? null : s.id)}
-            className="rounded-lg p-2 text-muted-foreground transition hover:bg-accent"
+            className="text-muted-foreground hover:bg-accent rounded-lg p-2 transition"
             aria-label="Historial"
           >
             {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -226,7 +227,7 @@ export function SubscriptionList({
           <div className="mt-3 flex items-center gap-2 text-xs">
             <span className="text-muted-foreground">Próximo pago: {formatDate(s.next_date)}</span>
             {s.isOverdue && (
-              <span className="rounded-full bg-destructive/10 px-2 py-0.5 font-medium text-destructive">
+              <span className="bg-destructive/10 text-destructive rounded-full px-2 py-0.5 font-medium">
                 Vencida
               </span>
             )}
@@ -242,45 +243,54 @@ export function SubscriptionList({
         <div className="mt-3 flex flex-wrap gap-2">
           {s.active && (
             <button
-              onClick={() => { if (!pending && s.account_id) handlePayment(s.id) }}
+              onClick={() => {
+                if (!pending && s.account_id) handlePayment(s.id);
+              }}
               title={!s.account_id ? "Asignale una cuenta primero" : undefined}
-              className={`flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground transition hover:opacity-90 ${(pending || !s.account_id) ? "opacity-50 pointer-events-none" : ""}`}
+              className={`bg-primary text-primary-foreground flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-medium transition hover:opacity-90 ${pending || !s.account_id ? "pointer-events-none opacity-50" : ""}`}
             >
               <CheckCircle2 className="h-3.5 w-3.5" /> Registrar pago
             </button>
           )}
           {s.active && !s.account_id && (
-            <span className="self-center text-xs text-muted-foreground">
-              Sin cuenta asignada
-            </span>
+            <span className="text-muted-foreground self-center text-xs">Sin cuenta asignada</span>
           )}
           <button
-            onClick={() => { if (!pending) handleToggle(s.id, s.active) }}
-            className={`flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-xs font-medium transition hover:bg-accent ${pending ? "opacity-50 pointer-events-none" : ""}`}
+            onClick={() => {
+              if (!pending) handleToggle(s.id, s.active);
+            }}
+            className={`border-border bg-background hover:bg-accent flex h-8 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition ${pending ? "pointer-events-none opacity-50" : ""}`}
           >
             {s.active ? (
-              <><Pause className="h-3.5 w-3.5" /> Pausar</>
+              <>
+                <Pause className="h-3.5 w-3.5" /> Pausar
+              </>
             ) : (
-              <><Play className="h-3.5 w-3.5" /> Activar</>
+              <>
+                <Play className="h-3.5 w-3.5" /> Activar
+              </>
             )}
           </button>
         </div>
 
         {/* Historial de pagos expandible */}
         {isExpanded && (
-          <div className="mt-4 border-t border-border pt-4">
-            <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+          <div className="border-border mt-4 border-t pt-4">
+            <div className="text-muted-foreground mb-2 flex items-center gap-1.5 text-xs font-semibold">
               <History className="h-3.5 w-3.5" /> Historial de pagos ({payments.length})
             </div>
             {payments.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Sin pagos registrados todavía.</p>
+              <p className="text-muted-foreground text-xs">Sin pagos registrados todavía.</p>
             ) : (
               <div className="flex flex-col gap-1.5">
                 {payments.map((p) => (
-                  <div key={p.id} className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2">
+                  <div
+                    key={p.id}
+                    className="bg-muted/50 flex items-center gap-2 rounded-lg px-3 py-2"
+                  >
                     <div className="flex-1">
                       <p className="text-xs font-medium">{formatDate(p.date)}</p>
-                      <p className="text-[11px] text-muted-foreground">
+                      <p className="text-muted-foreground text-[11px]">
                         {p.account?.name ?? "Sin cuenta"}
                       </p>
                     </div>
@@ -300,15 +310,15 @@ export function SubscriptionList({
   return (
     <div className="flex flex-col gap-4">
       {error && (
-        <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
+        <p className="bg-destructive/10 text-destructive rounded-lg px-3 py-2 text-sm">{error}</p>
       )}
 
       {/* Activas */}
       <section className="flex flex-col gap-2">
-        <h2 className="text-sm font-semibold text-muted-foreground">Activas</h2>
+        <h2 className="text-muted-foreground text-sm font-semibold">Activas</h2>
         {active.length === 0 && !showForm && (
-          <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
-            <p className="text-sm text-muted-foreground">
+          <div className="border-border bg-card rounded-2xl border p-8 text-center shadow-sm">
+            <p className="text-muted-foreground text-sm">
               No tenés suscripciones cargadas. Agregá Netflix, gym, Spotify, etc.
             </p>
           </div>
@@ -319,7 +329,7 @@ export function SubscriptionList({
       {/* Pausadas */}
       {paused.length > 0 && (
         <section className="flex flex-col gap-2">
-          <h2 className="text-sm font-semibold text-muted-foreground">Pausadas</h2>
+          <h2 className="text-muted-foreground text-sm font-semibold">Pausadas</h2>
           {paused.map(renderSub)}
         </section>
       )}
@@ -327,7 +337,7 @@ export function SubscriptionList({
       {/* Botón nueva suscripción */}
       <button
         onClick={openNew}
-        className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-card/50 text-sm font-medium text-muted-foreground transition hover:border-primary hover:text-primary"
+        className="border-border bg-card/50 text-muted-foreground hover:border-primary hover:text-primary flex h-12 items-center justify-center gap-2 rounded-2xl border border-dashed text-sm font-medium transition"
       >
         <Plus className="h-5 w-5" />
         Nueva suscripción
@@ -336,7 +346,9 @@ export function SubscriptionList({
       {/* Modal crear/editar */}
       <Modal
         open={showForm}
-        onOpenChange={(o) => { if (!o) closeForm() }}
+        onOpenChange={(o) => {
+          if (!o) closeForm();
+        }}
         title={editing ? "Editar suscripción" : "Nueva suscripción"}
       >
         <SubscriptionForm
@@ -378,10 +390,7 @@ function SubscriptionForm({
   onDelete?: () => void;
 }) {
   return (
-    <form
-      onSubmit={onSubmit}
-      className="flex flex-col gap-3"
-    >
+    <form onSubmit={onSubmit} className="flex flex-col gap-3">
       <div className="flex flex-col gap-1.5">
         <label className="text-sm font-medium">Nombre</label>
         <input
@@ -389,7 +398,7 @@ function SubscriptionForm({
           required
           defaultValue={editing?.name ?? ""}
           placeholder="Ej.: Netflix"
-          className="h-11 rounded-xl border border-input bg-background px-3 text-sm outline-none focus:border-primary"
+          className="border-input bg-background focus:border-primary h-11 rounded-xl border px-3 text-sm outline-none"
         />
       </div>
 
@@ -404,12 +413,12 @@ function SubscriptionForm({
             required
             defaultValue={editing?.amount ?? ""}
             placeholder="Ej.: 8999"
-            className="h-11 rounded-xl border border-input bg-background px-3 font-mono text-sm tabular-nums outline-none focus:border-primary"
+            className="border-input bg-background focus:border-primary h-11 rounded-xl border px-3 font-mono text-sm tabular-nums outline-none"
           />
         </div>
         <div className="flex w-[104px] shrink-0 flex-col gap-1.5">
           <label className="text-sm font-medium">Moneda</label>
-          <div className="flex h-11 w-full rounded-xl bg-muted p-1">
+          <div className="bg-muted flex h-11 w-full rounded-xl p-1">
             {CURRENCIES.map((c) => (
               <label
                 key={c}
@@ -422,7 +431,7 @@ function SubscriptionForm({
                   defaultChecked={c === (editing?.currency ?? baseCurrency)}
                   className="peer sr-only"
                 />
-                <div className="flex h-full w-full items-center justify-center rounded-lg text-xs font-semibold text-muted-foreground transition-all peer-checked:bg-primary peer-checked:text-primary-foreground peer-checked:shadow-sm hover:bg-muted/50 peer-checked:hover:bg-primary">
+                <div className="text-muted-foreground peer-checked:bg-primary peer-checked:text-primary-foreground hover:bg-muted/50 peer-checked:hover:bg-primary flex h-full w-full items-center justify-center rounded-lg text-xs font-semibold transition-all peer-checked:shadow-sm">
                   {c}
                 </div>
               </label>
@@ -437,10 +446,12 @@ function SubscriptionForm({
           <select
             name="cadence"
             defaultValue={editing?.cadence ?? "monthly"}
-            className="h-11 rounded-xl border border-input bg-background px-2 text-sm outline-none focus:border-primary"
+            className="border-input bg-background focus:border-primary h-11 rounded-xl border px-2 text-sm outline-none"
           >
             {Object.entries(CADENCE_LABELS).map(([v, l]) => (
-              <option key={v} value={v}>{l}</option>
+              <option key={v} value={v}>
+                {l}
+              </option>
             ))}
           </select>
         </div>
@@ -450,8 +461,8 @@ function SubscriptionForm({
             name="next_date"
             type="date"
             required
-            defaultValue={editing?.next_date ?? new Date().toISOString().slice(0, 10)}
-            className="h-11 rounded-xl border border-input bg-background px-3 text-sm outline-none focus:border-primary"
+            defaultValue={editing?.next_date ?? todayLocal()}
+            className="border-input bg-background focus:border-primary h-11 rounded-xl border px-3 text-sm outline-none"
           />
         </div>
       </div>
@@ -461,11 +472,13 @@ function SubscriptionForm({
         <select
           name="category_id"
           defaultValue={editing?.category_id ?? ""}
-          className="h-11 rounded-xl border border-input bg-background px-2 text-sm outline-none focus:border-primary"
+          className="border-input bg-background focus:border-primary h-11 rounded-xl border px-2 text-sm outline-none"
         >
           <option value="">Sin categoría</option>
           {categories.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
           ))}
         </select>
       </div>
@@ -475,16 +488,18 @@ function SubscriptionForm({
         <select
           name="account_id"
           defaultValue={editing?.account_id ?? ""}
-          className="h-11 rounded-xl border border-input bg-background px-2 text-sm outline-none focus:border-primary"
+          className="border-input bg-background focus:border-primary h-11 rounded-xl border px-2 text-sm outline-none"
         >
           <option value="">Sin cuenta</option>
           {accounts.map((a) => (
-            <option key={a.id} value={a.id}>{a.name} · {a.currency}</option>
+            <option key={a.id} value={a.id}>
+              {a.name} · {a.currency}
+            </option>
           ))}
         </select>
       </div>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p className="text-destructive text-sm">{error}</p>}
 
       <div className="flex gap-2">
         {onDelete && (
@@ -492,7 +507,7 @@ function SubscriptionForm({
             type="button"
             onClick={onDelete}
             disabled={pending}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border bg-background text-destructive transition hover:bg-destructive/5 disabled:opacity-50"
+            className="border-border bg-background text-destructive hover:bg-destructive/5 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition disabled:opacity-50"
           >
             <Trash2 className="h-4 w-4" />
           </button>
@@ -500,16 +515,22 @@ function SubscriptionForm({
         <button
           type="button"
           onClick={onCancel}
-          className="h-11 flex-1 rounded-xl border border-border bg-background text-sm font-medium transition hover:bg-accent"
+          className="border-border bg-background hover:bg-accent h-11 flex-1 rounded-xl border text-sm font-medium transition"
         >
           Cancelar
         </button>
         <button
           type="submit"
           disabled={pending}
-          className="h-11 flex-1 rounded-xl bg-primary text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50"
+          className="bg-primary text-primary-foreground h-11 flex-1 rounded-xl text-sm font-medium transition hover:opacity-90 disabled:opacity-50"
         >
-          {pending ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : editing ? "Guardar" : "Crear"}
+          {pending ? (
+            <Loader2 className="mx-auto h-4 w-4 animate-spin" />
+          ) : editing ? (
+            "Guardar"
+          ) : (
+            "Crear"
+          )}
         </button>
       </div>
     </form>

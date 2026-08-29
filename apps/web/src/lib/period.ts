@@ -1,4 +1,4 @@
-import { monthStartLocal, monthEndLocal, addMonthsIso, todayLocal } from "./dates";
+import { monthStartLocal, monthEndLocal, monthEndOfIso, addMonthsIso, todayLocal } from "./dates";
 
 export const PERIODS = [
   { key: "mes", label: "Este mes" },
@@ -32,9 +32,10 @@ export function resolvePeriod(key: string | undefined, now = new Date()): Resolv
 
   switch (key) {
     case "anterior": {
-      const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      from = monthStartLocal(prev);
-      to = monthEndLocal(prev);
+      // Aritmética sobre el ISO, no sobre un Date construido con componentes
+      // locales: eso último depende de la zona del proceso.
+      from = addMonthsIso(monthStartLocal(now), -1);
+      to = monthEndOfIso(from);
       label = "Mes anterior";
       break;
     }
@@ -74,8 +75,9 @@ export function resolvePeriod(key: string | undefined, now = new Date()): Resolv
  * (sueldo, vencimientos a fin de mes). Alcanza para saber si vas rápido o lento.
  */
 export function monthPace(spent: number, now = new Date()) {
-  const day = now.getDate();
-  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const today = todayLocal(now);
+  const day = Number(today.slice(8, 10));
+  const daysInMonth = Number(monthEndOfIso(today).slice(8, 10));
   return { day, daysInMonth, projected: (spent / day) * daysInMonth };
 }
 

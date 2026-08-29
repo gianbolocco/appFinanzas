@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase-server";
 import { fetchRate } from "@/lib/rates";
+import { getAccountReconciliation } from "@/lib/queries";
 import {
   accountFormSchema,
   categoryFormSchema,
@@ -40,11 +41,33 @@ export async function createAccount(formData: FormData) {
     user_id: user.id,
     ...parsed,
     balance: parsed.balance,
+    // La apertura queda fija: es contra ella que se reconcilia el saldo después.
+    opening_balance: parsed.balance,
   });
   if (error) throw error;
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/cuentas");
+}
+
+/**
+ * Reescribe el saldo con el que sale de apertura + movimientos.
+ * Solo se ofrece cuando hay deriva: es corregir el síntoma, no la causa, así que
+ * conviene mirar qué la produjo antes de tocarlo.
+ */
+export async function recalcAccountBalance(accountId: string) {
+  const recon = await getAccountReconciliation(accountId);
+  if (!recon) throw new Error("Cuenta no encontrada");
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("accounts")
+    .update({ balance: recon.computed })
+    .eq("id", accountId);
+  if (error) throw error;
+
+  revalidatePath("/dashboard", "layout");
+  return recon.drift;
 }
 
 export async function deleteAccount(accountId: string) {
@@ -448,6 +471,46 @@ export async function createBudget(formData: FormData) {
   if (error) throw error;
 
   revalidatePath("/dashboard/presupuestos");
+}
+
+/**
+ * Alta masiva desde la sugerencia. Se saltea lo que venga en cero y lo que ya
+ * tenga presupuesto, así tocar el botón dos veces no duplica nada.
+ */
+export async function createBudgetsBulk(items: { category_id: string; amount_limit: number }[]) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  const { data: profile } = await supabase
+    .from("users")
+    .select("base_currency")
+    .eq("id", user.id)
+    .single();
+
+  const { data: existing } = await supabase.from("budgets").select("category_id");
+  const taken = new Set((existing ?? []).map((b) => b.category_id));
+
+  const rows = items
+    .filter((i) => i.amount_limit > 0 && i.category_id && !taken.has(i.category_id))
+    .map((i) => ({
+      user_id: user.id,
+      category_id: i.category_id,
+      amount_limit: i.amount_limit,
+      currency: profile?.base_currency ?? "ARS",
+      period: "monthly" as const,
+    }));
+
+  if (rows.length === 0) return 0;
+
+  const { error } = await supabase.from("budgets").insert(rows);
+  if (error) throw error;
+
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/presupuestos");
+  return rows.length;
 }
 
 export async function deleteBudget(budgetId: string) {

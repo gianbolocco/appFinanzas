@@ -1,7 +1,15 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Search, Filter, X, Pencil, ArrowDownLeft, ArrowUpRight, ArrowRightLeft } from "lucide-react";
+import {
+  Search,
+  Filter,
+  X,
+  Pencil,
+  ArrowDownLeft,
+  ArrowUpRight,
+  ArrowRightLeft,
+} from "lucide-react";
 
 import { formatSigned, formatShortDate, formatMoney } from "@/lib/format";
 import { getCategoryIcon } from "@/lib/category-icons";
@@ -107,14 +115,14 @@ export function AccountTransactionList({
       {/* Subtotales filtrados */}
       {(incomeTotal > 0 || expenseTotal > 0) && (
         <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-xl bg-primary/5 px-3 py-2">
-            <p className="text-xs text-muted-foreground">Entradas</p>
-            <p className="font-mono text-sm font-semibold text-primary tabular-nums">
+          <div className="bg-primary/5 rounded-xl px-3 py-2">
+            <p className="text-muted-foreground text-xs">Entradas</p>
+            <p className="text-primary font-mono text-sm font-semibold tabular-nums">
               +{formatMoney(incomeTotal, accountCurrency ?? "ARS")}
             </p>
           </div>
-          <div className="rounded-xl bg-muted px-3 py-2">
-            <p className="text-xs text-muted-foreground">Salidas</p>
+          <div className="bg-muted rounded-xl px-3 py-2">
+            <p className="text-muted-foreground text-xs">Salidas</p>
             <p className="font-mono text-sm font-semibold tabular-nums">
               −{formatMoney(expenseTotal, accountCurrency ?? "ARS")}
             </p>
@@ -125,12 +133,12 @@ export function AccountTransactionList({
       {/* Barra de búsqueda + filtro */}
       <div className="flex gap-2">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="text-muted-foreground absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar…"
-            className="h-10 w-full rounded-xl border border-input bg-card pl-9 pr-3 text-sm outline-none focus:border-primary"
+            className="border-input bg-card focus:border-primary h-10 w-full rounded-xl border pl-9 pr-3 text-sm outline-none"
           />
         </div>
         <button
@@ -143,32 +151,36 @@ export function AccountTransactionList({
 
       {/* Filtros expandibles */}
       {showFilters && (
-        <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-3 shadow-sm">
+        <div className="border-border bg-card flex flex-col gap-2 rounded-2xl border p-3 shadow-sm">
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="h-9 rounded-lg border border-input bg-background px-2 text-xs outline-none focus:border-primary"
+            className="border-input bg-background focus:border-primary h-9 rounded-lg border px-2 text-xs outline-none"
           >
             <option value="">Todos los tipos</option>
             {Object.entries(TYPE_LABELS).map(([v, l]) => (
-              <option key={v} value={v}>{l}</option>
+              <option key={v} value={v}>
+                {l}
+              </option>
             ))}
           </select>
           <div className="flex gap-2">
             <select
               value={catFilter}
               onChange={(e) => setCatFilter(e.target.value)}
-              className="h-9 flex-1 rounded-lg border border-input bg-background px-2 text-xs outline-none focus:border-primary"
+              className="border-input bg-background focus:border-primary h-9 flex-1 rounded-lg border px-2 text-xs outline-none"
             >
               <option value="">Todas las categorías</option>
               {categories.map((c) => (
-                <option key={c.id} value={c.name}>{c.name}</option>
+                <option key={c.id} value={c.name}>
+                  {c.name}
+                </option>
               ))}
             </select>
             {hasFilters && (
               <button
                 onClick={clearFilters}
-                className="flex h-9 items-center gap-1 rounded-lg border border-border px-2 text-xs text-muted-foreground hover:bg-accent"
+                className="border-border text-muted-foreground hover:bg-accent flex h-9 items-center gap-1 rounded-lg border px-2 text-xs"
               >
                 <X className="h-3 w-3" /> Limpiar
               </button>
@@ -179,27 +191,35 @@ export function AccountTransactionList({
 
       {/* Lista */}
       {filtered.length === 0 ? (
-        <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
-          <p className="text-sm text-muted-foreground">
-            {hasFilters ? "No hay movimientos con esos filtros." : "Sin movimientos en esta cuenta."}
+        <div className="border-border bg-card rounded-2xl border p-8 text-center shadow-sm">
+          <p className="text-muted-foreground text-sm">
+            {hasFilters
+              ? "No hay movimientos con esos filtros."
+              : "Sin movimientos en esta cuenta."}
           </p>
         </div>
       ) : (
         <div className="flex flex-col gap-1.5">
           {filtered.map((t) => {
-            const isIncoming = t.type === "income" || (t.type === "transfer" && t.to_account_id === accountId);
+            const isIncoming =
+              t.type === "income" || (t.type === "transfer" && t.to_account_id === accountId);
             // En una transferencia entrante se acreditó dest_amount, no amount.
-            const shown = isIncoming && t.type === "transfer" ? (t.dest_amount ?? t.amount) : t.amount;
+            const shown =
+              isIncoming && t.type === "transfer" ? (t.dest_amount ?? t.amount) : t.amount;
             const signed = isIncoming ? shown : -shown;
             const isInstallment = t.installment_number && t.installments_total;
             const Icon = getCategoryIcon(t.category?.icon ?? null);
             const catColor = t.category?.color ?? "oklch(0.556 0 0)";
-            const TransferIcon = t.to_account_id ? ArrowRightLeft : isIncoming ? ArrowDownLeft : ArrowUpRight;
+            const TransferIcon = t.to_account_id
+              ? ArrowRightLeft
+              : isIncoming
+                ? ArrowDownLeft
+                : ArrowUpRight;
 
             return (
               <div
                 key={t.id}
-                className="group flex items-center gap-3 rounded-2xl border border-border bg-card p-3.5 shadow-sm transition hover:shadow-md"
+                className="border-border bg-card group flex items-center gap-3 rounded-2xl border p-3.5 shadow-sm transition hover:shadow-md"
               >
                 <div
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
@@ -215,18 +235,17 @@ export function AccountTransactionList({
                   <p className="truncate text-sm font-medium">
                     {t.note ?? t.category?.name ?? "Movimiento"}
                     {isInstallment && (
-                      <span className="ml-1 text-xs text-muted-foreground">
+                      <span className="text-muted-foreground ml-1 text-xs">
                         ({t.installment_number}/{t.installments_total})
                       </span>
                     )}
                   </p>
-                  <p className="truncate text-xs text-muted-foreground">
+                  <p className="text-muted-foreground truncate text-xs">
                     {formatShortDate(t.date)} · {TYPE_LABELS[t.type]}
                     {t.to_account_id && (
                       <span>
                         {" "}
-                        {isIncoming ? "←" : "→"}{" "}
-                        {isIncoming ? t.account?.name : t.to_account?.name}
+                        {isIncoming ? "←" : "→"} {isIncoming ? t.account?.name : t.to_account?.name}
                       </span>
                     )}
                   </p>
@@ -238,7 +257,7 @@ export function AccountTransactionList({
                 </p>
                 <button
                   onClick={() => openEdit(t)}
-                  className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-accent hover:text-foreground lg:opacity-0 lg:group-hover:opacity-100"
+                  className="text-muted-foreground hover:bg-accent hover:text-foreground rounded-lg p-1.5 transition lg:opacity-0 lg:group-hover:opacity-100"
                   aria-label="Editar"
                 >
                   <Pencil className="h-4 w-4" />
@@ -251,7 +270,9 @@ export function AccountTransactionList({
 
       <TransactionSheet
         open={sheetOpen}
-        onOpenChange={(o) => { if (!o) closeSheet() }}
+        onOpenChange={(o) => {
+          if (!o) closeSheet();
+        }}
         accounts={accounts}
         categories={categories}
         baseCurrency={baseCurrency}

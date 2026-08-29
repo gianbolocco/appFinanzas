@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { monthPace, pctChange, resolvePeriod } from "./period";
 
-// 15 de agosto de 2026: mes de 31 días, mitad de mes.
-const NOW = new Date(2026, 7, 15);
+// Mediodía de Buenos Aires del 15/8/2026: mes de 31 días, mitad de mes.
+// Instante en UTC para que el test no dependa del huso de la máquina.
+const NOW = new Date("2026-08-15T15:00:00Z");
 
 describe("resolvePeriod", () => {
   it("por defecto toma el mes calendario en curso", () => {

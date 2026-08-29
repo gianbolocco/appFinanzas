@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/dal";
 import { addMonthsIso, monthEndLocal, monthStartLocal, todayLocal } from "@/lib/dates";
 import type { Rate } from "@/lib/money";
 import { sumInBase, convert } from "@/lib/money";
+import { movementsDelta } from "@/lib/balance";
 
 // ----------------------------------------------------------------------------
 // Cuentas
@@ -158,6 +159,39 @@ export async function getAccountBalanceAtDate(accountId: string, date: string) {
   }
 
   return account.balance + delta;
+}
+
+/**
+ * Compara el saldo guardado contra el que sale de apertura + movimientos.
+ * `drift` distinto de cero significa que alguna escritura no cuadró: sin esto,
+ * un bug de saldo es invisible para siempre.
+ */
+export async function getAccountReconciliation(accountId: string) {
+  const supabase = await createClient();
+
+  const { data: account } = await supabase
+    .from("accounts")
+    .select("balance, opening_balance")
+    .eq("id", accountId)
+    .single();
+  if (!account) return null;
+
+  const { data: txs } = await supabase
+    .from("transactions")
+    .select(
+      "type, amount, dest_amount, date, account_id, to_account_id, installment_number, is_installment_parent",
+    )
+    .or(`account_id.eq.${accountId},to_account_id.eq.${accountId}`);
+
+  const computed =
+    Number(account.opening_balance ?? 0) + movementsDelta(txs ?? [], accountId, todayLocal());
+
+  return {
+    stored: Number(account.balance),
+    computed,
+    // Redondeo a centavos: el float no tiene por qué dar exacto.
+    drift: Math.round((Number(account.balance) - computed) * 100) / 100,
+  };
 }
 
 export async function getAccountTransactions(accountId: string) {
@@ -451,8 +485,8 @@ export async function getBreakdownByAccount(f?: ReportFilters) {
  */
 export async function getMonthlyTrends(months = 6, f?: ReportFilters) {
   const supabase = await createClient();
-  const now = new Date();
-  const first = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
+  const currentMonth = monthStartLocal();
+  const firstMonth = addMonthsIso(currentMonth, -(months - 1));
 
   let q = supabase
     .from("transactions")
@@ -460,8 +494,8 @@ export async function getMonthlyTrends(months = 6, f?: ReportFilters) {
     .eq("is_installment_parent", false)
     .in("type", ["income", "expense"])
     .is("goal_id", null)
-    .gte("date", monthStartLocal(first))
-    .lte("date", monthEndLocal(now));
+    .gte("date", firstMonth)
+    .lte("date", monthEndLocal());
 
   if (f?.accountId) q = q.eq("account_id", f.accountId);
   if (f?.categoryId) q = q.eq("category_id", f.categoryId);
@@ -474,9 +508,13 @@ export async function getMonthlyTrends(months = 6, f?: ReportFilters) {
     { month: string; ingresos: number; gastos: number; balance: number }
   >();
   for (let i = months - 1; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    buckets.set(monthStartLocal(d).slice(0, 7), {
-      month: d.toLocaleDateString("es-AR", { month: "short" }),
+    const start = addMonthsIso(currentMonth, -i);
+    buckets.set(start.slice(0, 7), {
+      // Mediodía UTC y locale fijo: el nombre del mes no puede depender del huso.
+      month: new Date(`${start}T12:00:00Z`).toLocaleDateString("es-AR", {
+        month: "short",
+        timeZone: "UTC",
+      }),
       ingresos: 0,
       gastos: 0,
       balance: 0,

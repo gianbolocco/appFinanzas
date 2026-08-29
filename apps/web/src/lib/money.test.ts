@@ -6,6 +6,7 @@ import {
   installmentDates,
   dueThrough,
   destRateFromQuote,
+  roundBudget,
   type Rate,
 } from "./money";
 
@@ -121,5 +122,23 @@ describe("destRateFromQuote", () => {
   it("no convierte con una cotización vacía o negativa", () => {
     expect(destRateFromQuote("ARS", "USD", 0)).toBe(0);
     expect(destRateFromQuote("ARS", "USD", -5)).toBe(0);
+  });
+});
+
+describe("roundBudget", () => {
+  it("redondea hacia arriba con un paso proporcional al monto", () => {
+    expect(roundBudget(47_312.54)).toBe(48_000);
+    expect(roundBudget(12_400)).toBe(13_000);
+    expect(roundBudget(3_200)).toBe(3_500);
+    expect(roundBudget(240)).toBe(300);
+  });
+
+  it("no propone presupuesto sin gasto", () => {
+    expect(roundBudget(0)).toBe(0);
+    expect(roundBudget(-100)).toBe(0);
+  });
+
+  it("deja quieto un monto que ya es redondo", () => {
+    expect(roundBudget(50_000)).toBe(50_000);
   });
 });

@@ -14,11 +14,7 @@ export const getCurrentUser = async () => {
     redirect("/login");
   }
 
-  const { data: profile } = await supabase
-    .from("users")
-    .select("*")
-    .eq("id", user.id)
-    .single();
+  const { data: profile } = await supabase.from("users").select("*").eq("id", user.id).single();
 
   if (!profile) {
     redirect("/login");

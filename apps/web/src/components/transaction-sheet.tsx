@@ -13,6 +13,7 @@ import {
 } from "@/lib/actions";
 import { formatMoney } from "@/lib/format";
 import { destRateFromQuote } from "@/lib/money";
+import { todayLocal } from "@/lib/dates";
 import { Modal } from "@/components/modal";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 
@@ -107,7 +108,7 @@ function TransactionSheetInner({
   const [toAccountId, setToAccountId] = useState(editingTx?.to_account_id ?? "");
   const [categoryId, setCategoryId] = useState(editingTx?.category_id ?? "");
   const [note, setNote] = useState(editingTx?.note ?? "");
-  const [date, setDate] = useState(editingTx?.date ?? new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(editingTx?.date ?? todayLocal());
   const [installments, setInstallments] = useState("");
   const [quote, setQuote] = useState("");
 

@@ -3,16 +3,19 @@ import { Banknote, Landmark, CreditCard, Smartphone, PiggyBank, ArrowLeft } from
 import Link from "next/link";
 
 import { getCurrentUser } from "@/lib/dal";
+import { monthStartLocal } from "@/lib/dates";
 import {
   getAccountById,
   getAccountMonthlyStats,
   getAccountBalanceAtDate,
   getAccountTransactions,
+  getAccountReconciliation,
   getAccounts,
   getCategories,
 } from "@/lib/queries";
 import { formatMoney } from "@/lib/format";
 import { AccountTransactionList } from "./account-tx-list";
+import { BalanceDrift } from "./balance-drift";
 
 const TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   cash: Banknote,
@@ -43,16 +46,15 @@ export default async function AccountDetailPage({ params }: PageProps<"/dashboar
     notFound();
   }
 
-  const [stats, prevMonthBalance, transactions, allAccounts, allCategories] = await Promise.all([
-    getAccountMonthlyStats(id),
-    getAccountBalanceAtDate(
-      id,
-      new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10),
-    ),
-    getAccountTransactions(id),
-    getAccounts(),
-    getCategories(),
-  ]);
+  const [stats, prevMonthBalance, transactions, allAccounts, allCategories, recon] =
+    await Promise.all([
+      getAccountMonthlyStats(id),
+      getAccountBalanceAtDate(id, monthStartLocal()),
+      getAccountTransactions(id),
+      getAccounts(),
+      getCategories(),
+      getAccountReconciliation(id),
+    ]);
 
   const slimAccounts = allAccounts.map((a) => ({
     id: a.id,
@@ -109,6 +111,16 @@ export default async function AccountDetailPage({ params }: PageProps<"/dashboar
       </section>
 
       {/* Resumen del mes */}
+      {recon && (
+        <BalanceDrift
+          accountId={id}
+          stored={recon.stored}
+          computed={recon.computed}
+          drift={recon.drift}
+          currency={account.currency}
+        />
+      )}
+
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div className="border-border bg-card rounded-2xl border p-4 shadow-sm">
           <p className="text-muted-foreground text-xs">Ingresos</p>

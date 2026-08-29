@@ -83,3 +83,14 @@ export function destRateFromQuote(
   if (!(quote > 0)) return 0;
   return fromCurrency === refCurrency ? quote : 1 / quote;
 }
+
+/**
+ * Redondea hacia arriba a una cifra elegible como presupuesto: nadie se pone un
+ * límite de 47.312,54. El paso crece con el monto para no proponer 100.000
+ * cuando gastaste 3.200.
+ */
+export function roundBudget(amount: number): number {
+  if (amount <= 0) return 0;
+  const step = amount >= 100_000 ? 10_000 : amount >= 10_000 ? 1_000 : amount >= 1_000 ? 500 : 100;
+  return Math.ceil(amount / step) * step;
+}
