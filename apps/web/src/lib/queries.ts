@@ -53,8 +53,17 @@ export function getTotalBalance(
 // ----------------------------------------------------------------------------
 // Categorías
 // ----------------------------------------------------------------------------
-export async function getCategories() {
+/**
+ * Las predefinidas son filas globales que no se pueden borrar sin borrárselas a
+ * todos, así que cada usuario guarda cuáles no quiere ver. Por defecto salen
+ * filtradas; solo la pantalla de Categorías pide las ocultas para poder
+ * mostrarlas de nuevo.
+ */
+export async function getCategories(opts?: { includeHidden?: boolean }) {
   const supabase = await createClient();
+  const { profile } = await getCurrentUser();
+  const hidden = new Set<string>(profile.hidden_category_ids ?? []);
+
   const { data, error } = await supabase
     .from("categories")
     .select("*")
@@ -62,7 +71,9 @@ export async function getCategories() {
     .order("order", { ascending: true })
     .order("name", { ascending: true });
   if (error) throw error;
-  return data;
+
+  const annotated = (data ?? []).map((c) => ({ ...c, hidden: hidden.has(c.id) }));
+  return opts?.includeHidden ? annotated : annotated.filter((c) => !c.hidden);
 }
 
 // ----------------------------------------------------------------------------

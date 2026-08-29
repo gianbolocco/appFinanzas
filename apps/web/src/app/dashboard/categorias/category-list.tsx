@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useState, useTransition } from "react";
-import { Plus, Trash2, Loader2, Pencil, type LucideIcon } from "lucide-react";
+import { Plus, Trash2, Loader2, Pencil, Eye, EyeOff, type LucideIcon } from "lucide-react";
 
-import { createCategory, updateCategory, deleteCategory } from "@/lib/actions";
+import { createCategory, updateCategory, deleteCategory, setCategoryHidden } from "@/lib/actions";
 import { getCategoryIcon, ICON_NAMES } from "@/lib/category-icons";
 import { Modal } from "@/components/modal";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -17,6 +17,7 @@ type Category = {
   icon: string | null;
   color: string;
   is_predefined: boolean;
+  hidden: boolean;
 };
 
 const KIND_LABELS: Record<string, string> = {
@@ -48,8 +49,20 @@ export function CategoryList({ categories }: { categories: Category[] }) {
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
-  const predefined = categories.filter((c) => c.is_predefined);
+  const predefined = categories.filter((c) => c.is_predefined && !c.hidden);
+  const hiddenOnes = categories.filter((c) => c.is_predefined && c.hidden);
   const custom = categories.filter((c) => !c.is_predefined);
+
+  function handleToggleHidden(cat: Category) {
+    startTransition(async () => {
+      try {
+        await setCategoryHidden(cat.id, !cat.hidden);
+        toast.success(cat.hidden ? `"${cat.name}" vuelve a aparecer` : `"${cat.name}" oculta`);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Error al ocultar");
+      }
+    });
+  }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -113,7 +126,7 @@ export function CategoryList({ categories }: { categories: Category[] }) {
     <div className="flex flex-col gap-6">
       <button
         onClick={openNew}
-        className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-card/50 text-sm font-medium text-muted-foreground transition hover:border-primary hover:text-primary"
+        className="border-border bg-card/50 text-muted-foreground hover:border-primary hover:text-primary flex h-12 items-center justify-center gap-2 rounded-2xl border border-dashed text-sm font-medium transition"
       >
         <Plus className="h-5 w-5" />
         Nueva categoría
@@ -121,33 +134,37 @@ export function CategoryList({ categories }: { categories: Category[] }) {
 
       {/* Custom */}
       <section className="flex flex-col gap-2">
-        <h2 className="text-sm font-semibold text-muted-foreground">Tus categorías</h2>
+        <h2 className="text-muted-foreground text-sm font-semibold">Tus categorías</h2>
         {custom.length > 0 ? (
           <div className="flex flex-col gap-1.5">
             {custom.map((c) => {
               return (
                 <div
                   key={c.id}
-                  className="group flex items-center gap-3 rounded-2xl border border-border bg-card p-3.5 shadow-sm transition hover:shadow-md"
+                  className="border-border bg-card group flex items-center gap-3 rounded-2xl border p-3.5 shadow-sm transition hover:shadow-md"
                 >
                   <div
                     className="flex h-9 w-9 items-center justify-center rounded-full"
                     style={{ backgroundColor: `color-mix(in oklch, ${c.color} 15%, transparent)` }}
                   >
-                    <CategoryIconRender name={c.icon ?? "circle-ellipsis"} className="h-4 w-4" color={c.color} />
+                    <CategoryIconRender
+                      name={c.icon ?? "circle-ellipsis"}
+                      className="h-4 w-4"
+                      color={c.color}
+                    />
                   </div>
                   <span className="flex-1 text-sm font-medium">{c.name}</span>
-                  <span className="text-xs text-muted-foreground">{KIND_LABELS[c.kind]}</span>
+                  <span className="text-muted-foreground text-xs">{KIND_LABELS[c.kind]}</span>
                   <button
                     onClick={() => openEdit(c)}
-                    className="rounded-lg p-1.5 text-muted-foreground opacity-0 transition hover:bg-accent hover:text-foreground group-hover:opacity-100"
+                    className="text-muted-foreground hover:bg-accent hover:text-foreground rounded-lg p-1.5 opacity-0 transition group-hover:opacity-100"
                     aria-label="Editar"
                   >
                     <Pencil className="h-4 w-4" />
                   </button>
                   <button
                     onClick={() => setConfirmDelete(c.id)}
-                    className="rounded-lg p-1.5 text-muted-foreground opacity-0 transition hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                    className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive rounded-lg p-1.5 opacity-0 transition group-hover:opacity-100"
                     aria-label="Eliminar"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -157,46 +174,96 @@ export function CategoryList({ categories }: { categories: Category[] }) {
             })}
           </div>
         ) : (
-          <div className="rounded-2xl border border-border bg-card/50 p-6 text-center shadow-sm">
-            <p className="text-sm text-muted-foreground">No tenés categorías personalizadas. ¡Creá una para organizar mejor tus gastos!</p>
+          <div className="border-border bg-card/50 rounded-2xl border p-6 text-center shadow-sm">
+            <p className="text-muted-foreground text-sm">
+              No tenés categorías personalizadas. ¡Creá una para organizar mejor tus gastos!
+            </p>
           </div>
         )}
       </section>
 
       {/* Predefinidas */}
-      <section className="flex flex-col gap-2 mt-2">
-        <h2 className="text-sm font-semibold text-muted-foreground">Predefinidas</h2>
+      <section className="mt-2 flex flex-col gap-2">
+        <h2 className="text-muted-foreground text-sm font-semibold">Predefinidas</h2>
         <div className="flex flex-col gap-1.5">
           {predefined.map((c) => {
             return (
               <div
                 key={c.id}
-                className="group flex items-center gap-3 rounded-2xl border border-border bg-card p-3.5 shadow-sm transition hover:shadow-md"
+                className="border-border bg-card group flex items-center gap-3 rounded-2xl border p-3.5 shadow-sm transition hover:shadow-md"
               >
                 <div
                   className="flex h-9 w-9 items-center justify-center rounded-full"
                   style={{ backgroundColor: `color-mix(in oklch, ${c.color} 15%, transparent)` }}
                 >
-                  <CategoryIconRender name={c.icon ?? "circle-ellipsis"} className="h-4 w-4" color={c.color} />
+                  <CategoryIconRender
+                    name={c.icon ?? "circle-ellipsis"}
+                    className="h-4 w-4"
+                    color={c.color}
+                  />
                 </div>
                 <span className="flex-1 text-sm font-medium">{c.name}</span>
-                <span className="text-xs text-muted-foreground">{KIND_LABELS[c.kind]}</span>
+                <span className="text-muted-foreground text-xs">{KIND_LABELS[c.kind]}</span>
                 <button
-                  onClick={() => openEdit(c)}
-                  className="rounded-lg p-1.5 text-muted-foreground opacity-0 transition hover:bg-accent hover:text-foreground group-hover:opacity-100"
-                  aria-label="Editar"
+                  onClick={() => handleToggleHidden(c)}
+                  disabled={pending}
+                  className="text-muted-foreground hover:bg-accent hover:text-foreground rounded-lg p-1.5 opacity-0 transition disabled:opacity-50 group-hover:opacity-100"
+                  aria-label="Ocultar categoría"
+                  title="Ocultar: deja de aparecer en los selectores"
                 >
-                  <Pencil className="h-4 w-4" />
+                  <EyeOff className="h-4 w-4" />
                 </button>
               </div>
             );
           })}
         </div>
+        <p className="text-muted-foreground text-xs">
+          Las predefinidas las comparten todos los usuarios, así que no se pueden borrar ni editar.
+          Ocultarlas las saca de los selectores sin tocar tus movimientos ya cargados.
+        </p>
       </section>
+
+      {/* Ocultas */}
+      {hiddenOnes.length > 0 && (
+        <section className="flex flex-col gap-2">
+          <h2 className="text-muted-foreground text-sm font-semibold">
+            Ocultas ({hiddenOnes.length})
+          </h2>
+          <div className="flex flex-col gap-1.5">
+            {hiddenOnes.map((c) => (
+              <div
+                key={c.id}
+                className="border-border bg-card/40 group flex items-center gap-3 rounded-2xl border border-dashed p-3.5 transition hover:shadow-sm"
+              >
+                <div className="bg-muted flex h-9 w-9 items-center justify-center rounded-full">
+                  <CategoryIconRender
+                    name={c.icon ?? "circle-ellipsis"}
+                    className="h-4 w-4 opacity-40"
+                    color={c.color}
+                  />
+                </div>
+                <span className="text-muted-foreground flex-1 text-sm">{c.name}</span>
+                <span className="text-muted-foreground text-xs">{KIND_LABELS[c.kind]}</span>
+                <button
+                  onClick={() => handleToggleHidden(c)}
+                  disabled={pending}
+                  className="text-muted-foreground hover:bg-accent hover:text-foreground rounded-lg p-1.5 transition disabled:opacity-50"
+                  aria-label="Volver a mostrar"
+                  title="Volver a mostrar"
+                >
+                  <Eye className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <Modal
         open={showForm}
-        onOpenChange={(o) => { if (!o) closeForm() }}
+        onOpenChange={(o) => {
+          if (!o) closeForm();
+        }}
         title={editing ? "Editar categoría" : "Nueva categoría"}
       >
         <CategoryForm
@@ -212,7 +279,9 @@ export function CategoryList({ categories }: { categories: Category[] }) {
 
       <ConfirmDialog
         open={!!confirmDelete}
-        onOpenChange={(o) => { if (!o) setConfirmDelete(null) }}
+        onOpenChange={(o) => {
+          if (!o) setConfirmDelete(null);
+        }}
         title="¿Eliminar categoría?"
         description="Esta acción no se puede deshacer."
         confirmLabel="Eliminar"
@@ -241,12 +310,9 @@ function CategoryForm({
   const [selectedIcon, setSelectedIcon] = useState(editing?.icon ?? "utensils");
 
   return (
-    <form
-      onSubmit={onSubmit}
-      className="flex flex-col gap-3"
-    >
+    <form onSubmit={onSubmit} className="flex flex-col gap-3">
       {/* Preview */}
-      <div className="flex items-center gap-3 rounded-xl bg-muted/50 p-3">
+      <div className="bg-muted/50 flex items-center gap-3 rounded-xl p-3">
         <PreviewIcon iconName={selectedIcon} color={editing?.color ?? COLORS[0]} />
         <span className="text-sm font-medium">{editing?.name ?? "Vista previa"}</span>
       </div>
@@ -258,7 +324,7 @@ function CategoryForm({
           required
           defaultValue={editing?.name ?? ""}
           placeholder="Ej.: Mascota"
-          className="h-11 rounded-xl border border-input bg-background px-3 text-sm outline-none focus:border-primary"
+          className="border-input bg-background focus:border-primary h-11 rounded-xl border px-3 text-sm outline-none"
         />
       </div>
 
@@ -268,10 +334,12 @@ function CategoryForm({
           name="kind"
           defaultValue={editing?.kind ?? "expense"}
           disabled={!!editing}
-          className="h-11 rounded-xl border border-input bg-background px-2 text-sm outline-none focus:border-primary disabled:opacity-50"
+          className="border-input bg-background focus:border-primary h-11 rounded-xl border px-2 text-sm outline-none disabled:opacity-50"
         >
           {Object.entries(KIND_LABELS).map(([v, l]) => (
-            <option key={v} value={v}>{l}</option>
+            <option key={v} value={v}>
+              {l}
+            </option>
           ))}
         </select>
       </div>
@@ -280,7 +348,7 @@ function CategoryForm({
 
       <div className="flex flex-col gap-1.5">
         <label className="text-sm font-medium">Ícono</label>
-        <div className="grid grid-cols-8 gap-1.5 rounded-xl border border-border bg-background p-2">
+        <div className="border-border bg-background grid grid-cols-8 gap-1.5 rounded-xl border p-2">
           {ICON_LIST.map(({ name, Icon }) => (
             <button
               key={name}
@@ -307,7 +375,7 @@ function CategoryForm({
                 className="peer sr-only"
               />
               <span
-                className="block h-8 w-8 rounded-full ring-offset-2 ring-offset-background transition peer-checked:ring-2 peer-checked:ring-primary"
+                className="ring-offset-background peer-checked:ring-primary block h-8 w-8 rounded-full ring-offset-2 transition peer-checked:ring-2"
                 style={{ backgroundColor: c }}
               />
             </label>
@@ -315,7 +383,7 @@ function CategoryForm({
         </div>
       </div>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p className="text-destructive text-sm">{error}</p>}
 
       <div className="flex gap-2">
         {onDelete && (
@@ -323,7 +391,7 @@ function CategoryForm({
             type="button"
             onClick={onDelete}
             disabled={pending}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border bg-background text-destructive transition hover:bg-destructive/5 disabled:opacity-50"
+            className="border-border bg-background text-destructive hover:bg-destructive/5 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition disabled:opacity-50"
           >
             <Trash2 className="h-4 w-4" />
           </button>
@@ -331,16 +399,22 @@ function CategoryForm({
         <button
           type="button"
           onClick={onCancel}
-          className="h-11 flex-1 rounded-xl border border-border bg-background text-sm font-medium transition hover:bg-accent"
+          className="border-border bg-background hover:bg-accent h-11 flex-1 rounded-xl border text-sm font-medium transition"
         >
           Cancelar
         </button>
         <button
           type="submit"
           disabled={pending}
-          className="h-11 flex-1 rounded-xl bg-primary text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50"
+          className="bg-primary text-primary-foreground h-11 flex-1 rounded-xl text-sm font-medium transition hover:opacity-90 disabled:opacity-50"
         >
-          {pending ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : editing ? "Guardar" : "Crear"}
+          {pending ? (
+            <Loader2 className="mx-auto h-4 w-4 animate-spin" />
+          ) : editing ? (
+            "Guardar"
+          ) : (
+            "Crear"
+          )}
         </button>
       </div>
     </form>

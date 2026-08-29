@@ -14,6 +14,7 @@ import {
 import { getCurrentUser } from "@/lib/dal";
 import {
   getAccounts,
+  getCategories,
   getBudgets,
   getPendingInstallments,
   getPeriodTotals,
@@ -24,9 +25,9 @@ import {
 } from "@/lib/queries";
 import { addMonthsIso, monthEndLocal, monthStartLocal, todayLocal } from "@/lib/dates";
 import { sumInBase } from "@/lib/money";
-import { formatMoney, formatSigned, formatShortDate } from "@/lib/format";
-import { getCategoryIcon } from "@/lib/category-icons";
+import { formatMoney } from "@/lib/format";
 import { KpiRow } from "@/components/kpi-row";
+import { RecentTransactions } from "@/components/recent-transactions";
 import { PendingCommitments } from "@/components/pending-commitments";
 
 const ACCOUNT_ICONS: Record<string, LucideIcon> = {
@@ -58,17 +59,27 @@ export default async function DashboardPage() {
   const monthFrom = monthStartLocal();
   const monthTo = monthEndLocal();
 
-  const [accounts, transactions, totals, prevTotals, subscriptions, installments, budgets, rates] =
-    await Promise.all([
-      getAccounts(),
-      getTransactions({ limit: 5 }),
-      getPeriodTotals({ from: monthFrom, to: monthTo }),
-      getPeriodTotals({ from: addMonthsIso(monthFrom, -1), to: addMonthsIso(monthTo, -1) }),
-      getSubscriptions(),
-      getPendingInstallments(),
-      getBudgets(),
-      getRates(),
-    ]);
+  const [
+    accounts,
+    categories,
+    transactions,
+    totals,
+    prevTotals,
+    subscriptions,
+    installments,
+    budgets,
+    rates,
+  ] = await Promise.all([
+    getAccounts(),
+    getCategories(),
+    getTransactions({ limit: 5 }),
+    getPeriodTotals({ from: monthFrom, to: monthTo }),
+    getPeriodTotals({ from: addMonthsIso(monthFrom, -1), to: addMonthsIso(monthTo, -1) }),
+    getSubscriptions(),
+    getPendingInstallments(),
+    getBudgets(),
+    getRates(),
+  ]);
 
   // Mismo horizonte rodante que las cuotas, vencidas incluidas.
   const horizon = addMonthsIso(todayLocal(), 1);
@@ -190,7 +201,7 @@ export default async function DashboardPage() {
           </div>
         ) : (
           <div className="glass flex flex-col rounded-2xl p-2 shadow-sm">
-            {accounts.slice(0, 4).map((a, i, arr) => {
+            {accounts.slice(0, 4).map((a, i) => {
               const Icon = ACCOUNT_ICONS[a.type] ?? Banknote;
               const isPositive = a.balance >= 0;
               return (
@@ -262,58 +273,12 @@ export default async function DashboardPage() {
         currency={baseCurrency}
       />
 
-      {/* Últimos movimientos */}
-      <section className="flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Últimos movimientos</h2>
-          <Link href="/dashboard/gastos" className="text-primary text-sm font-medium">
-            Ver todo
-          </Link>
-        </div>
-
-        {transactions.length === 0 ? (
-          <div className="border-border bg-card rounded-2xl border p-6 text-center shadow-sm">
-            <p className="text-muted-foreground text-sm">
-              Todavía no cargaste movimientos. Tocá el botón verde para sumar el primero.
-            </p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-1.5">
-            {transactions.map((t) => {
-              const isIncome = t.type === "income";
-              const signed = isIncome ? t.amount : -t.amount;
-              const Icon = getCategoryIcon(t.category?.icon ?? null);
-              const catColor = t.category?.color ?? "oklch(0.556 0 0)";
-              return (
-                <div
-                  key={t.id}
-                  className="glass group flex cursor-pointer items-center gap-4 rounded-2xl p-3.5 transition-all hover:-translate-y-0.5 hover:shadow-md"
-                >
-                  <div
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-transform group-hover:scale-110"
-                    style={{ backgroundColor: `color-mix(in oklch, ${catColor} 15%, transparent)` }}
-                  >
-                    <Icon className="h-5 w-5" style={{ color: catColor }} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">
-                      {t.note ?? t.category?.name ?? "Movimiento"}
-                    </p>
-                    <p className="text-muted-foreground truncate text-xs">
-                      {formatShortDate(t.date)} · {t.account?.name}
-                    </p>
-                  </div>
-                  <p
-                    className={`font-mono text-sm font-semibold tabular-nums ${isIncome ? "text-primary" : "text-foreground"}`}
-                  >
-                    {formatSigned(signed, t.currency)}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
+      <RecentTransactions
+        transactions={transactions}
+        categories={categories}
+        accounts={accounts}
+        baseCurrency={baseCurrency}
+      />
     </div>
   );
 }

@@ -80,6 +80,39 @@ export async function createCategory(formData: FormData) {
   revalidatePath("/dashboard/categorias");
 }
 
+/**
+ * Oculta o vuelve a mostrar una categoría predefinida para este usuario.
+ * Son filas compartidas por todos: borrarlas no es una opción, y por eso las
+ * policies de update/delete no las alcanzan.
+ */
+export async function setCategoryHidden(categoryId: string, hidden: boolean) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  const { data: profile } = await supabase
+    .from("users")
+    .select("hidden_category_ids")
+    .eq("id", user.id)
+    .single();
+
+  const current: string[] = profile?.hidden_category_ids ?? [];
+  const next = hidden
+    ? [...new Set([...current, categoryId])]
+    : current.filter((id) => id !== categoryId);
+
+  const { error } = await supabase
+    .from("users")
+    .update({ hidden_category_ids: next })
+    .eq("id", user.id);
+  if (error) throw error;
+
+  // Las categorías alimentan los selectores de todo el dashboard.
+  revalidatePath("/dashboard", "layout");
+}
+
 export async function deleteCategory(categoryId: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("categories").delete().eq("id", categoryId);

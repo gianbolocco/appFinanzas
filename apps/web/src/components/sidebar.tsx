@@ -1,12 +1,25 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Wallet, PieChart, TrendingUp, Settings, Plus, Landmark, Tags, Target, RefreshCw } from "lucide-react";
+import {
+  Home,
+  Wallet,
+  PieChart,
+  TrendingUp,
+  Settings,
+  Plus,
+  Landmark,
+  Tags,
+  Target,
+  RefreshCw,
+} from "lucide-react";
 import { useState } from "react";
 import { motion } from "motion/react";
 
 import { TransactionSheet } from "@/components/transaction-sheet";
+import logo from "@/app/icon.png";
 
 const NAV_ITEMS = [
   { href: "/dashboard", icon: Home, label: "Inicio", exact: true },
@@ -45,11 +58,16 @@ export function Sidebar({
 
   return (
     <>
-      <aside className="hidden w-[260px] shrink-0 flex-col border-r border-border/50 glass-panel p-4 lg:fixed lg:inset-y-0 lg:left-0 lg:flex shadow-xl shadow-black/5 z-20">
+      <aside className="border-border/50 glass-panel z-20 hidden w-[260px] shrink-0 flex-col border-r p-4 shadow-xl shadow-black/5 lg:fixed lg:inset-y-0 lg:left-0 lg:flex">
         <div className="mb-8 flex items-center gap-3 px-2">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-premium text-primary-foreground shadow-lg shadow-primary/20">
-            <span className="text-base font-bold">G</span>
-          </div>
+          <Image
+            src={logo}
+            alt=""
+            width={40}
+            height={40}
+            priority
+            className="shadow-primary/20 h-10 w-10 rounded-xl shadow-lg"
+          />
           <span className="text-lg font-semibold tracking-tight">Guita</span>
         </div>
 
@@ -65,12 +83,14 @@ export function Sidebar({
                 {isActive && (
                   <motion.div
                     layoutId="sidebar-active"
-                    className="absolute inset-0 rounded-xl bg-primary/10 dark:bg-primary/20"
+                    className="bg-primary/10 dark:bg-primary/20 absolute inset-0 rounded-xl"
                     initial={false}
                     transition={{ type: "spring", stiffness: 400, damping: 30 }}
                   />
                 )}
-                <item.icon className={`h-5 w-5 z-10 transition-transform group-hover:scale-110 ${isActive ? "fill-primary/20" : ""}`} />
+                <item.icon
+                  className={`z-10 h-5 w-5 transition-transform group-hover:scale-110 ${isActive ? "fill-primary/20" : ""}`}
+                />
                 <span className="z-10">{item.label}</span>
               </Link>
             );
@@ -81,7 +101,7 @@ export function Sidebar({
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={() => setSheetOpen(true)}
-          className="mt-6 flex h-11 items-center justify-center gap-2 rounded-xl bg-gradient-premium px-4 text-sm font-medium text-primary-foreground shadow-lg shadow-primary/25 transition-shadow hover:shadow-primary/40"
+          className="bg-gradient-premium text-primary-foreground shadow-primary/25 hover:shadow-primary/40 mt-6 flex h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-medium shadow-lg transition-shadow"
         >
           <Plus className="h-5 w-5" />
           Agregar movimiento
@@ -90,7 +110,9 @@ export function Sidebar({
 
       <TransactionSheet
         open={sheetOpen}
-        onOpenChange={(o) => { if (!o) setSheetOpen(false) }}
+        onOpenChange={(o) => {
+          if (!o) setSheetOpen(false);
+        }}
         accounts={accounts}
         categories={categories}
         baseCurrency={baseCurrency}

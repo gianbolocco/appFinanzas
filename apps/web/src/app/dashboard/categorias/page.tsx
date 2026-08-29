@@ -2,7 +2,7 @@ import { getCategories } from "@/lib/queries";
 import { CategoryList } from "./category-list";
 
 export default async function CategoriasPage() {
-  const categories = await getCategories();
+  const categories = await getCategories({ includeHidden: true });
 
   return (
     <div className="flex flex-col gap-5">

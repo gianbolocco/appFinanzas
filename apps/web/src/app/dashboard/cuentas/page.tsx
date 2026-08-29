@@ -1,47 +1,39 @@
-import Link from "next/link";
-import { Banknote, Landmark, CreditCard, Smartphone, PiggyBank } from "lucide-react";
-
-import { getAccounts, getAccountMonthlyStats } from "@/lib/queries";
+import { getAccounts, getAccountMonthlyStats, getRates } from "@/lib/queries";
 import { getCurrentUser } from "@/lib/dal";
+import { convert } from "@/lib/money";
 import { AccountList } from "./account-list";
-
-const TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  cash: Banknote,
-  bank: Landmark,
-  credit_card: CreditCard,
-  debit_card: CreditCard,
-  wallet: Smartphone,
-  savings: PiggyBank,
-};
-
-const TYPE_LABELS: Record<string, string> = {
-  cash: "Efectivo",
-  bank: "Banco",
-  credit_card: "Tarjeta de crédito",
-  debit_card: "Tarjeta de débito",
-  wallet: "Billetera",
-  savings: "Ahorro",
-};
 
 export default async function CuentasPage() {
   const { profile } = await getCurrentUser();
-  const accounts = await getAccounts();
+  const baseCurrency = profile.base_currency;
+  const [accounts, rates] = await Promise.all([getAccounts(), getRates()]);
 
   const accountsWithStats = await Promise.all(
-    accounts.map(async (a) => {
-      const stats = await getAccountMonthlyStats(a.id);
-      return { ...a, stats };
-    })
+    accounts.map(async (a) => ({
+      ...a,
+      stats: await getAccountMonthlyStats(a.id),
+      // null cuando falta la cotización: la tarjeta lo omite en vez de mentir.
+      balanceBase: convert(a.balance, a.currency, baseCurrency, rates),
+    })),
   );
+
+  // Las cuentas grandes primero: con siete cuentas, el orden de creación no dice nada.
+  accountsWithStats.sort((a, b) => (b.balanceBase ?? 0) - (a.balanceBase ?? 0));
+
+  const patrimonio = accountsWithStats.reduce((s, a) => s + (a.balanceBase ?? 0), 0);
 
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-1">
         <h1 className="text-xl font-semibold lg:text-2xl">Cuentas</h1>
-        <p className="text-sm text-muted-foreground">{accounts.length} cuentas activas</p>
+        <p className="text-muted-foreground text-sm">{accounts.length} cuentas activas</p>
       </header>
 
-      <AccountList accounts={accountsWithStats} baseCurrency={profile.base_currency} typeLabels={TYPE_LABELS} />
+      <AccountList
+        accounts={accountsWithStats}
+        baseCurrency={baseCurrency}
+        patrimonio={patrimonio}
+      />
     </div>
   );
 }

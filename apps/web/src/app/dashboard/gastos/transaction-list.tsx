@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Search, Filter, X, Pencil } from "lucide-react";
+import { Search, Filter, X } from "lucide-react";
 
-import { formatSigned, formatShortDate } from "@/lib/format";
-import { getCategoryIcon } from "@/lib/category-icons";
+import { TransactionRow, TYPE_LABELS } from "@/components/transaction-row";
 import { TransactionSheet } from "@/components/transaction-sheet";
 
 type Tx = {
@@ -34,13 +33,6 @@ type Category = {
   is_predefined: boolean;
 };
 type Account = { id: string; name: string; type: string; currency: string; balance: number };
-
-const TYPE_LABELS: Record<string, string> = {
-  expense: "Gasto",
-  income: "Ingreso",
-  transfer: "Transfer",
-  subscription: "Suscripción",
-};
 
 export function TransactionList({
   transactions,
@@ -182,52 +174,9 @@ export function TransactionList({
         </div>
       ) : (
         <div className="flex flex-col gap-1.5">
-          {filtered.map((t) => {
-            const isIncome = t.type === "income";
-            const signed = isIncome ? t.amount : -t.amount;
-            const isInstallment = t.installment_number && t.installments_total;
-            const Icon = getCategoryIcon(t.category?.icon ?? null);
-            const catColor = t.category?.color ?? "oklch(0.556 0 0)";
-            return (
-              <div
-                key={t.id}
-                className="border-border bg-card group flex items-center gap-3 rounded-2xl border p-3.5 shadow-sm transition hover:shadow-md"
-              >
-                <div
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
-                  style={{ backgroundColor: `color-mix(in oklch, ${catColor} 15%, transparent)` }}
-                >
-                  <Icon className="h-5 w-5" style={{ color: catColor }} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">
-                    {t.note ?? t.category?.name ?? "Movimiento"}
-                    {isInstallment && (
-                      <span className="text-muted-foreground ml-1 text-xs">
-                        ({t.installment_number}/{t.installments_total})
-                      </span>
-                    )}
-                  </p>
-                  <p className="text-muted-foreground truncate text-xs">
-                    {formatShortDate(t.date)} · {t.account?.name} · {TYPE_LABELS[t.type]}
-                    {t.type === "transfer" && t.to_account && ` → ${t.to_account.name}`}
-                  </p>
-                </div>
-                <p
-                  className={`font-mono text-sm font-semibold tabular-nums ${isIncome ? "text-primary" : "text-foreground"}`}
-                >
-                  {formatSigned(signed, t.currency)}
-                </p>
-                <button
-                  onClick={() => openEdit(t)}
-                  className="text-muted-foreground hover:bg-accent hover:text-foreground rounded-lg p-1.5 transition lg:opacity-0 lg:group-hover:opacity-100"
-                  aria-label="Editar"
-                >
-                  <Pencil className="h-4 w-4" />
-                </button>
-              </div>
-            );
-          })}
+          {filtered.map((t) => (
+            <TransactionRow key={t.id} tx={t} onEdit={() => openEdit(t)} />
+          ))}
         </div>
       )}
 

@@ -1,10 +1,19 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Plus, Trash2, Loader2, Banknote, Landmark, CreditCard, Smartphone, PiggyBank } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Loader2,
+  Banknote,
+  Landmark,
+  CreditCard,
+  Smartphone,
+  PiggyBank,
+} from "lucide-react";
 
 import { createAccount, deleteAccount, setDefaultAccount } from "@/lib/actions";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, formatMoneyRound } from "@/lib/format";
 import { Modal } from "@/components/modal";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { toast } from "sonner";
@@ -18,6 +27,7 @@ type Account = {
   type: string;
   currency: string;
   balance: number;
+  balanceBase: number | null;
   is_default: boolean;
   stats: {
     income: number;
@@ -50,11 +60,11 @@ const CURRENCIES = ["ARS", "USD"];
 export function AccountList({
   accounts,
   baseCurrency,
-  typeLabels,
+  patrimonio,
 }: {
   accounts: Account[];
   baseCurrency: string;
-  typeLabels: Record<string, string>;
+  patrimonio: number;
 }) {
   const [showForm, setShowForm] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -99,7 +109,7 @@ export function AccountList({
       try {
         await setDefaultAccount(id);
         toast.success("Cuenta predeterminada actualizada");
-      } catch (err) {
+      } catch {
         toast.error("Error al actualizar la cuenta predeterminada");
       }
     });
@@ -110,15 +120,17 @@ export function AccountList({
       {/* Botón agregar cuenta */}
       <button
         onClick={() => setShowForm(true)}
-        className="flex h-12 items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-card/50 text-sm font-medium text-muted-foreground transition hover:border-primary hover:text-primary"
+        className="border-border bg-card/50 text-muted-foreground hover:border-primary hover:text-primary flex h-12 items-center justify-center gap-2 rounded-2xl border border-dashed text-sm font-medium transition"
       >
         <Plus className="h-5 w-5" />
         Agregar cuenta
       </button>
 
       {accounts.length === 0 && !showForm && (
-        <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
-          <p className="text-sm text-muted-foreground">No tenés cuentas todavía. Creá la primera.</p>
+        <div className="border-border bg-card rounded-2xl border p-8 text-center shadow-sm">
+          <p className="text-muted-foreground text-sm">
+            No tenés cuentas todavía. Creá la primera.
+          </p>
         </div>
       )}
 
@@ -127,75 +139,104 @@ export function AccountList({
           const Icon = TYPE_ICONS[a.type] ?? Banknote;
           const totalIn = a.stats.income + a.stats.transferIn;
           const totalOut = a.stats.expense + a.stats.transferOut;
+          const net = totalIn - totalOut;
+          const share =
+            patrimonio > 0 && a.balanceBase !== null ? (a.balanceBase / patrimonio) * 100 : null;
 
           return (
             <div
               key={a.id}
-              className="group relative flex flex-col rounded-2xl border border-border/50 bg-card/60 p-5 shadow-sm backdrop-blur-xl transition-all hover:-translate-y-1 hover:border-border hover:shadow-lg"
+              className="border-border/50 bg-card/60 hover:border-border group relative flex flex-col rounded-2xl border p-5 shadow-sm backdrop-blur-xl transition-all hover:-translate-y-1 hover:shadow-lg"
             >
-              <Link href={`/dashboard/cuentas/${a.id}`} className="absolute inset-0 z-0 rounded-2xl" aria-label={`Ver cuenta ${a.name}`} />
-              
+              <Link
+                href={`/dashboard/cuentas/${a.id}`}
+                className="absolute inset-0 z-0 rounded-2xl"
+                aria-label={`Ver cuenta ${a.name}`}
+              />
+
               <div className="pointer-events-none relative z-10 mb-5 flex items-start justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                  <div className="bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground flex h-12 w-12 items-center justify-center rounded-2xl transition-colors">
                     <Icon className="h-6 w-6" />
                   </div>
                   <div>
                     <h3 className="font-semibold leading-tight">{a.name}</h3>
-                    <p className="text-xs text-muted-foreground">
-                      {typeLabels[a.type] ?? a.type} · {a.currency}
+                    <p className="text-muted-foreground text-xs">
+                      {TYPE_LABELS[a.type] ?? a.type} · {a.currency}
                     </p>
                   </div>
                 </div>
-                  <div className="flex flex-col gap-1">
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleSetDefault(a.id);
-                      }}
-                      className={`pointer-events-auto rounded-xl p-2 -mr-1 -mt-1 transition ${
-                        a.is_default
-                          ? "text-yellow-500 hover:text-yellow-600"
-                          : "text-muted-foreground/30 hover:text-yellow-500/80"
-                      }`}
-                      aria-label="Marcar como predeterminada"
-                      title="Marcar como predeterminada"
-                    >
-                      <Star className="h-4 w-4" fill={a.is_default ? "currentColor" : "none"} />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setConfirmDelete(a.id);
-                      }}
-                      className="pointer-events-auto rounded-xl p-2 -mr-1 text-muted-foreground/40 transition hover:bg-destructive/10 hover:text-destructive"
-                      aria-label="Eliminar cuenta"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
+                <div className="flex flex-col gap-1">
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleSetDefault(a.id);
+                    }}
+                    className={`pointer-events-auto -mr-1 -mt-1 rounded-xl p-2 transition ${
+                      a.is_default
+                        ? "text-yellow-500 hover:text-yellow-600"
+                        : "text-muted-foreground/30 hover:text-yellow-500/80"
+                    }`}
+                    aria-label="Marcar como predeterminada"
+                    title="Marcar como predeterminada"
+                  >
+                    <Star className="h-4 w-4" fill={a.is_default ? "currentColor" : "none"} />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setConfirmDelete(a.id);
+                    }}
+                    className="text-muted-foreground/40 hover:bg-destructive/10 hover:text-destructive pointer-events-auto -mr-1 rounded-xl p-2 transition"
+                    aria-label="Eliminar cuenta"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </div>
+              </div>
 
-              <div className="pointer-events-none relative z-10 mb-4 flex flex-col gap-1">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Saldo Neto</p>
-                <p className="font-mono text-3xl font-bold tracking-tight tabular-nums">
+              <div className="pointer-events-none relative z-10 mb-4 flex flex-col gap-0.5">
+                <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-widest">
+                  Saldo neto
+                </p>
+                <p className="font-mono text-3xl font-bold tabular-nums tracking-tight">
                   {formatMoney(a.balance, a.currency)}
+                </p>
+                <p className="text-muted-foreground h-4 font-mono text-xs tabular-nums">
+                  {a.currency !== baseCurrency && a.balanceBase !== null
+                    ? `≈ ${formatMoneyRound(a.balanceBase, baseCurrency)}`
+                    : share !== null
+                      ? `${share.toFixed(0)}% de tu patrimonio`
+                      : ""}
                 </p>
               </div>
 
-              <div className="pointer-events-none relative z-10 grid grid-cols-2 gap-2 rounded-xl bg-background/60 p-3 shadow-inner">
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Ingresos</span>
-                  <span className="font-mono text-sm font-semibold text-primary">
-                    +{formatMoney(totalIn, a.currency)}
+              {/* Una fila por dato: dos montos en la misma línea no entran y se
+                  encimaban. El neto arriba, que es la pregunta real. */}
+              <div className="bg-background/60 pointer-events-none relative z-10 flex flex-col gap-1.5 rounded-xl p-3 shadow-inner">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider">
+                    Este mes
+                  </span>
+                  <span
+                    className={`truncate font-mono text-sm font-semibold tabular-nums ${net > 0 ? "text-primary" : net < 0 ? "text-destructive" : ""}`}
+                  >
+                    {net > 0 ? "+" : net < 0 ? "−" : ""}
+                    {formatMoneyRound(Math.abs(net), a.currency)}
                   </span>
                 </div>
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Egresos</span>
-                  <span className="font-mono text-sm font-semibold text-destructive">
-                    -{formatMoney(totalOut, a.currency)}
+                <div className="text-muted-foreground flex items-baseline justify-between gap-2 text-xs">
+                  <span>Ingresos</span>
+                  <span className="truncate font-mono tabular-nums">
+                    {formatMoneyRound(totalIn, a.currency)}
+                  </span>
+                </div>
+                <div className="text-muted-foreground flex items-baseline justify-between gap-2 text-xs">
+                  <span>Egresos</span>
+                  <span className="truncate font-mono tabular-nums">
+                    {formatMoneyRound(totalOut, a.currency)}
                   </span>
                 </div>
               </div>
@@ -205,7 +246,13 @@ export function AccountList({
       </div>
 
       {/* Modal crear cuenta */}
-      <Modal open={showForm} onOpenChange={(o) => { if (!o) setShowForm(false) }} title="Nueva cuenta">
+      <Modal
+        open={showForm}
+        onOpenChange={(o) => {
+          if (!o) setShowForm(false);
+        }}
+        title="Nueva cuenta"
+      >
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium">Nombre</label>
@@ -213,7 +260,7 @@ export function AccountList({
               name="name"
               required
               placeholder="Ej.: Cuenta del banco"
-              className="h-11 rounded-xl border border-input bg-background px-3 text-sm outline-none focus:border-primary"
+              className="border-input bg-background focus:border-primary h-11 rounded-xl border px-3 text-sm outline-none"
             />
           </div>
           <div className="flex gap-2">
@@ -222,16 +269,18 @@ export function AccountList({
               <select
                 name="type"
                 defaultValue="cash"
-                className="h-11 rounded-xl border border-input bg-background px-2 text-sm outline-none focus:border-primary"
+                className="border-input bg-background focus:border-primary h-11 rounded-xl border px-2 text-sm outline-none"
               >
                 {Object.entries(TYPE_LABELS).map(([v, l]) => (
-                  <option key={v} value={v}>{l}</option>
+                  <option key={v} value={v}>
+                    {l}
+                  </option>
                 ))}
               </select>
             </div>
             <div className="flex w-[104px] shrink-0 flex-col gap-1.5">
               <label className="text-sm font-medium">Moneda</label>
-              <div className="flex h-11 w-full rounded-xl bg-muted p-1">
+              <div className="bg-muted flex h-11 w-full rounded-xl p-1">
                 {CURRENCIES.map((c) => (
                   <label
                     key={c}
@@ -244,7 +293,7 @@ export function AccountList({
                       defaultChecked={c === baseCurrency}
                       className="peer sr-only"
                     />
-                    <div className="flex h-full w-full items-center justify-center rounded-lg text-xs font-semibold text-muted-foreground transition-all peer-checked:bg-primary peer-checked:text-primary-foreground peer-checked:shadow-sm hover:bg-muted/50 peer-checked:hover:bg-primary">
+                    <div className="text-muted-foreground peer-checked:bg-primary peer-checked:text-primary-foreground hover:bg-muted/50 peer-checked:hover:bg-primary flex h-full w-full items-center justify-center rounded-lg text-xs font-semibold transition-all peer-checked:shadow-sm">
                       {c}
                     </div>
                   </label>
@@ -260,22 +309,22 @@ export function AccountList({
               step="0.01"
               inputMode="decimal"
               defaultValue="0"
-              className="h-11 rounded-xl border border-input bg-background px-3 font-mono text-sm tabular-nums outline-none focus:border-primary"
+              className="border-input bg-background focus:border-primary h-11 rounded-xl border px-3 font-mono text-sm tabular-nums outline-none"
             />
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p className="text-destructive text-sm">{error}</p>}
           <div className="flex gap-2">
             <button
               type="button"
               onClick={() => setShowForm(false)}
-              className="h-11 flex-1 rounded-xl border border-border bg-background text-sm font-medium transition hover:bg-accent"
+              className="border-border bg-background hover:bg-accent h-11 flex-1 rounded-xl border text-sm font-medium transition"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={pending}
-              className="h-11 flex-1 rounded-xl bg-primary text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-50"
+              className="bg-primary text-primary-foreground h-11 flex-1 rounded-xl text-sm font-medium transition hover:opacity-90 disabled:opacity-50"
             >
               {pending ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : "Crear"}
             </button>
@@ -285,7 +334,9 @@ export function AccountList({
 
       <ConfirmDialog
         open={!!confirmDelete}
-        onOpenChange={(o) => { if (!o) setConfirmDelete(null) }}
+        onOpenChange={(o) => {
+          if (!o) setConfirmDelete(null);
+        }}
         title="¿Eliminar cuenta?"
         description="Se borrarán la cuenta y todos sus movimientos. Esta acción no se puede deshacer."
         confirmLabel="Eliminar"
