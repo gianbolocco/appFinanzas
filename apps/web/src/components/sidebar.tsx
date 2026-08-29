@@ -19,7 +19,6 @@ import { useState } from "react";
 import { motion } from "motion/react";
 
 import { TransactionSheet } from "@/components/transaction-sheet";
-import logo from "@/app/icon.png";
 
 const NAV_ITEMS = [
   { href: "/dashboard", icon: Home, label: "Inicio", exact: true },
@@ -60,14 +59,7 @@ export function Sidebar({
     <>
       <aside className="border-border/50 glass-panel z-20 hidden w-[260px] shrink-0 flex-col border-r p-4 shadow-xl shadow-black/5 lg:fixed lg:inset-y-0 lg:left-0 lg:flex">
         <div className="mb-8 flex items-center gap-3 px-2">
-          <Image
-            src={logo}
-            alt=""
-            width={40}
-            height={40}
-            priority
-            className="shadow-primary/20 h-10 w-10 rounded-xl shadow-lg"
-          />
+          <Image src="/logo.png" alt="" width={40} height={40} priority className="h-10 w-10" />
           <span className="text-lg font-semibold tracking-tight">Guita</span>
         </div>
 
